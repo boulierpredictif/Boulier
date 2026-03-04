@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V2.26</title>
+    <title>Boulier Prédictif V2.27</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -277,7 +277,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎲 Boulier Prédictif <span class="version">V2.26</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V2.27</span></h1>
             <div class="nav">
                 <button onclick="showPage('home')" class="active">
                     <span>🏠</span> <span>Accueil</span>
@@ -332,7 +332,18 @@
                 <div class="stats-grid" id="home-stats"></div>
                 
                 <div class="alert alert-info">
-                    <div class="alert-title">✨ Nouveautés V2.21</div>
+                    <div class="alert-title">🔬 V2.27 — Audit statistique des règles empiriques</div>
+                    <ul style="margin:0; padding-left: 20px;">
+                        <li><strong>Règles empiriques recalibrées sur 665 tirages réels</strong> (analyse statistique complète)</li>
+                        <li><strong>Post-Q corrigé</strong> : 11 (-14%) et 13 (-21%) retirés des favoris → remplacés par 3 et 5 (+8.7%)</li>
+                        <li><strong>Malus Post-Q ajoutés</strong> : 6, 8, 9, 11, 13, 16 pénalisés (signaux négatifs confirmés)</li>
+                        <li><strong>Max10/12/13/14/16 recalibrés</strong> sur les vraies fréquences (ex: Max16 → 8 prioritaire à 44.3%)</li>
+                        <li><strong>Règle "après 11 → 8,1,4,9" supprimée</strong> (signal nul, 8 était même négatif)</li>
+                        <li><strong>Nouvelle règle répétition 14</strong> : signal +10.2% — fort bonus si 14 sorti au tirage précédent</li>
+                        <li><strong>Nouvelle règle répétition 13</strong> : signal +6.8% — bonus modéré</li>
+                        <li><strong>Nouvelle règle anti-répétition 8</strong> : pénalité si 8 sorti au tirage précédent (-5.5%)</li>
+                    </ul>
+                    <div class="alert-title" style="margin-top: 15px;">✨ Nouveautés V2.21</div>
                     <ul style="margin-top: 10px; padding-left: 20px;">
                         <li><strong>✅ Import JSON complet</strong> : restaure tirages, scores, prédictions ET poids d'apprentissage</li>
                         <li><strong>💾 Notification de sauvegarde améliorée</strong> : propose le JSON en priorité (plus le .txt seul)</li>
@@ -899,7 +910,7 @@
 
             <!-- PAGE REGLES -->            <!-- PAGE REGLES -->
             <div id="page-rules" class="page">
-                <h2 style="margin-bottom:5px;color:#1e293b;">Règles &amp; Apprentissage — V2.26</h2>
+                <h2 style="margin-bottom:5px;color:#1e293b;">Règles &amp; Apprentissage — V2.27</h2>
                 <p style="color:#6b7280;font-size:14px;margin-bottom:20px;">Récapitulatif complet des règles empiriques et des mécanismes d'apprentissage du boulier.</p>
 
                 <!-- MÉTHODES IA -->
@@ -978,7 +989,7 @@
                             <tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:8px;"><strong>2 derniers vers 3 premiers</strong></td><td style="padding:8px;">Début de journée uniquement</td><td style="padding:8px;">Les 2 derniers numéros du tirage précédent boostés en P1-P3</td></tr>
                             <tr style="border-bottom:1px solid #e5e7eb;background:#fafafa;"><td style="padding:8px;"><strong>Récurrence inter-tirages</strong></td><td style="padding:8px;">Numéros sur-représentés sur 2-3 tirages précédents</td><td style="padding:8px;">Bonus proportionnel au taux (max +3.0)</td></tr>
                             <tr style="border-bottom:1px solid #e5e7eb;"><td style="padding:8px;"><strong>Q veille vers P1</strong></td><td style="padding:8px;">Dernier Q avec résultat dans les 24h précédentes</td><td style="padding:8px;">Probabilité qu un numéro du Q sorte en P1 du tirage suivant</td></tr>
-                            <tr style="background:#fafafa;"><td style="padding:8px;"><strong>Zone Post-Q</strong></td><td style="padding:8px;">10 tirages NON-Q suivant un Q (par date, V2.24)</td><td style="padding:8px;">Bonus x2 sur 4, 7, 11, 13 en P1-P3</td></tr>
+                            <tr style="background:#fafafa;"><td style="padding:8px;"><strong>Zone Post-Q</strong></td><td style="padding:8px;">10 tirages NON-Q suivant un Q (par date, V2.24)</td><td style="padding:8px;">Bonus x2 sur 3, 4, 5, 7 en P1-P3 | Malus x0.6 sur 6, 8, 9, 11, 13, 16 (V2.27)</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -1053,7 +1064,7 @@
         };
         
         // Système Post-Q : Numéros favorisés Post-Q avec probabilité marginale élevée
-        const postQNumbers = [11, 13, 4, 7];
+        const postQNumbers = [3, 4, 5, 7]; // v2.27 : 11(-14%) et 13(-21%) retirés, 3(+8.7%) et 5(+8.7%) ajoutés
         const postQWindow = 10; // Nombre de tirages après Q à surveiller
         
         // Initialisation
@@ -1898,22 +1909,38 @@
             
             // 5. RÈGLES EMPIRIQUES
             // 5a. Règles fixes de base (fréquences empiriques par type de max)
-            if (max === 10) [3, 6, 7, 10].forEach(n => {
+            // v2.27 : règles recalibrées sur 665 tirages réels (analyse statistique)
+            // Max10 : top réels 5(56.6%), 4(55.4%), 8(54.2%), 7(53.0%) — ancienne règle [3,6,7,10] invalidée
+            if (max === 10) [5, 4, 8, 7].forEach(n => {
                 if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
             });
-            if (max === 12) [7, 10, 12].forEach(n => {
-                if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
-            });
-            if (max === 13) [10, 11, 13].forEach(n => {
-                if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
-            });
-            if (max >= 15 && max <= 16) [15, 16].forEach(n => {
-                if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
-            });
-            // Max 5-9 : le max ressort souvent au tirage suivant
-            if (max >= 5 && max <= 9) {
-                if (scores[max] !== undefined) methodScores.empirical[max] += 2.0;
+            // Max12 : top réels 11(50.7%), 1(45.2%), 5(45.2%) + 12 se répète à 60% (fort)
+            if (max === 12) {
+                [11, 1, 5].forEach(n => {
+                    if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
+                });
+                // Le 12 (max du format) ressort dans 60% des cas vs base 41.7% → bonus fort
+                if (scores[12] !== undefined) methodScores.empirical[12] += 3.0;
             }
+            // Max13 : top réels 6(53%), 7(50%), 4(50%) — ancienne règle [10,11,13] invalidée (tous à la base)
+            if (max === 13) [6, 7, 4].forEach(n => {
+                if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
+            });
+            // Max14 : top réels 11(44.8%), 8(43.3%), 3(43.3%) — règle inexistante avant
+            if (max === 14) [11, 8, 3].forEach(n => {
+                if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
+            });
+            // Max15 : le 15 ressort dans 50% des cas vs base 33.3% → bonus fort
+            if (max === 15) {
+                [5, 12, 3].forEach(n => {
+                    if (scores[n] !== undefined) methodScores.empirical[n] += 1.2;
+                });
+                if (scores[15] !== undefined) methodScores.empirical[15] += 2.5;
+            }
+            // Max16 : top réels 8(+13.1%), 2(+6.5%), 5(+6.5%) — ancienne règle [15,16] invalidée
+            if (max === 16) [8, 2, 5].forEach(n => {
+                if (scores[n] !== undefined) methodScores.empirical[n] += 2.0;
+            });
             // Règle Max 7 spéciale : si 5 ET 2 présents dans le dernier tirage du même type
             // → forte probabilité que 7 sorte (sauf si le dernier tirage avait max > 13)
             if (max === 7) {
@@ -1933,17 +1960,35 @@
                     }
                 }
             }
-            // Règle "Après 10-11" : si le dernier tirage du même type contenait 10 ou 11
-            // → 8, 1, 4, 9 ont une propension à sortir au suivant
+            // Règle \"Après 10-11\" SUPPRIMÉE (v2.27) : signal nul sur 665 tirages
+            // (8 était même négatif : -5.1% sous la base)
+
+            // v2.27 NOUVELLE RÈGLE : Répétition du 14 (signal fort : +10.2% vs base)
+            // Si 14 était dans le dernier tirage et max >= 14 → bonus fort
             {
-                const lastSame = relatedTirages[0];
-                if (lastSame && lastSame.resultat) {
-                    const hadTenOrEleven = lastSame.resultat.includes(10) || lastSame.resultat.includes(11);
-                    if (hadTenOrEleven) {
-                        [8, 1, 4, 9].forEach(n => {
-                            if (scores[n] !== undefined) methodScores.empirical[n] += 1.8;
-                        });
+                const lastAny = historique[0];
+                if (lastAny && lastAny.resultat && max >= 14 && lastAny.resultat.includes(14)) {
+                    if (scores[14] !== undefined) {
+                        methodScores.empirical[14] += 3.5;
+                        alerts.push({ type: 'info', message: '🔁 <strong>Répétition 14</strong> : sorti au tirage précédent → +40% de chance de revenir' });
                     }
+                }
+            }
+
+            // v2.27 NOUVELLE RÈGLE : Répétition du 13 (signal modéré : +6.8% vs base)
+            {
+                const lastAny = historique[0];
+                if (lastAny && lastAny.resultat && max >= 13 && lastAny.resultat.includes(13)) {
+                    if (scores[13] !== undefined) methodScores.empirical[13] += 2.0;
+                }
+            }
+
+            // v2.27 NOUVELLE RÈGLE : Anti-répétition du 8 (signal -5.5% vs base)
+            // Si 8 était dans le dernier tirage → légère pénalité
+            {
+                const lastAny = historique[0];
+                if (lastAny && lastAny.resultat && lastAny.resultat.includes(8)) {
+                    if (scores[8] !== undefined) methodScores.empirical[8] -= 1.5;
                 }
             }
             
@@ -2062,12 +2107,22 @@
             const postQInfo = isInPostQZone(currentIndex);
             
             if (postQInfo.inZone) {
-                // Bonus fixes x2 sur postQNumbers (4, 7, 11, 13)
+                // v2.27 : postQNumbers corrigés → [3, 4, 5, 7] (11 et 13 retirés car signaux négatifs)
                 const postQBonus = 2.0;
                 postQNumbers.forEach(num => {
                     if (scores[num] !== undefined) {
                         scores[num] *= postQBonus;
                         methodScores.empirical[num] += 10;
+                    }
+                });
+
+                // v2.27 NOUVEAU : Malus Post-Q sur numéros défavorisés en P1-P3
+                // 6(-7.2%), 8(-7.2%), 9(-9.4%), 11(-14%), 13(-20.8%), 16(-20.8%)
+                const postQMalus = [6, 8, 9, 11, 13, 16];
+                postQMalus.forEach(num => {
+                    if (scores[num] !== undefined) {
+                        scores[num] *= 0.6;
+                        methodScores.empirical[num] -= 5;
                     }
                 });
 
@@ -2088,7 +2143,7 @@
                 const dynStr = dynNums.length > 0 ? ' | Dynamiques : ' + dynNums.join(', ') : '';
                 alerts.push({
                     type: 'warning',
-                    message: '⚠️ <strong>ZONE POST-Q</strong> (' + postQInfo.qCode + ' +' + postQInfo.distance + ') : Fixes : ' + fixesStr + dynStr
+                    message: '⚠️ <strong>ZONE POST-Q</strong> (' + postQInfo.qCode + ' +' + postQInfo.distance + ') : Favoris : ' + fixesStr + dynStr + ' | Pénalisés : 6, 8, 9, 11, 13, 16'
                 });
             }
             
