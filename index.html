@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V2.27</title>
+    <title>Boulier Prédictif V3.0</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -277,7 +277,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎲 Boulier Prédictif <span class="version">V2.27</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V3.0</span></h1>
             <div class="nav">
                 <button onclick="showPage('home')" class="active">
                     <span>🏠</span> <span>Accueil</span>
@@ -332,6 +332,13 @@
                 <div class="stats-grid" id="home-stats"></div>
                 
                 <div class="alert alert-info">
+                    <div class="alert-title">🚀 V3.0 — Statistiques Post-Q enrichies</div>
+                    <ul>
+                        <li><strong>Filtre temporel Post-Q</strong> : lecture des fréquences sur Tous tirages / 10 / 20 / 30 derniers jours</li>
+                        <li><strong>Comparaison simultanée</strong> : affichage côte à côte "Tous tirages" et période sélectionnée</li>
+                        <li><strong>⭐ Numéros fétiches 4, 7, 11, 13</strong> : bloc dédié avec fréquences (observation uniquement)</li>
+                        <li><strong>Correction JSON</strong> : tri chronologique des tirages pour cohérence des zones Post-Q</li>
+                    </ul>
                     <div class="alert-title">🔬 V2.27 — Audit statistique des règles empiriques</div>
                     <ul style="margin:0; padding-left: 20px;">
                         <li><strong>Règles empiriques recalibrées sur 665 tirages réels</strong> (analyse statistique complète)</li>
@@ -816,10 +823,20 @@
                 
                 <div class="alert" style="background: #fef3c7; border-left: 4px solid #f59e0b; color: #92400e; padding: 15px; margin-bottom: 20px;">
                     <div style="font-weight: 600; margin-bottom: 10px;">⚠️ Zone d'alerte Post-Q</div>
-                    Les 10 tirages qui suivent un tirage Q montrent une probabilité marginale élevée pour les numéros : <strong>11, 13, 4, 7</strong><br>
-                    <strong>DANS LES 3 PREMIÈRES POSITIONS</strong> du tirage
+                    Les 10 tirages qui suivent un tirage Q montrent une probabilité marginale élevée pour les numéros : <strong>3, 4, 5, 7</strong><br>
+                    <strong>DANS LES 3 PREMIÈRES POSITIONS</strong> du tirage<br>
+                    <span style="font-size:12px;opacity:0.8;">Numéros fétiches historiques également suivis : 4, 7, 11, 13</span>
                 </div>
-                
+
+                <!-- Sélecteur de fenêtre temporelle V3.0 -->
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap;">
+                    <span style="font-weight:600;color:#1e293b;">📅 Période d'analyse :</span>
+                    <button id="btn-postq-all"  onclick="setPostQFilter(0)"   style="padding:6px 16px;border-radius:20px;border:2px solid #f59e0b;background:#f59e0b;color:#fff;font-weight:600;cursor:pointer;">Tous tirages</button>
+                    <button id="btn-postq-30"   onclick="setPostQFilter(30)"  style="padding:6px 16px;border-radius:20px;border:2px solid #d1d5db;background:#fff;color:#374151;font-weight:600;cursor:pointer;">30 derniers jours</button>
+                    <button id="btn-postq-20"   onclick="setPostQFilter(20)"  style="padding:6px 16px;border-radius:20px;border:2px solid #d1d5db;background:#fff;color:#374151;font-weight:600;cursor:pointer;">20 derniers jours</button>
+                    <button id="btn-postq-10"   onclick="setPostQFilter(10)"  style="padding:6px 16px;border-radius:20px;border:2px solid #d1d5db;background:#fff;color:#374151;font-weight:600;cursor:pointer;">10 derniers jours</button>
+                </div>
+
                 <div id="postQ-content"></div>
             </div>
             
@@ -910,7 +927,7 @@
 
             <!-- PAGE REGLES -->            <!-- PAGE REGLES -->
             <div id="page-rules" class="page">
-                <h2 style="margin-bottom:5px;color:#1e293b;">Règles &amp; Apprentissage — V2.27</h2>
+                <h2 style="margin-bottom:5px;color:#1e293b;">Règles &amp; Apprentissage — V3.0</h2>
                 <p style="color:#6b7280;font-size:14px;margin-bottom:20px;">Récapitulatif complet des règles empiriques et des mécanismes d'apprentissage du boulier.</p>
 
                 <!-- MÉTHODES IA -->
@@ -1066,6 +1083,8 @@
         // Système Post-Q : Numéros favorisés Post-Q avec probabilité marginale élevée
         const postQNumbers = [3, 4, 5, 7]; // v2.27 : 11(-14%) et 13(-21%) retirés, 3(+8.7%) et 5(+8.7%) ajoutés
         const postQWindow = 10; // Nombre de tirages après Q à surveiller
+        const postQFetiche = [4, 7, 11, 13]; // V3.0 : numéros fétiches historiques (affichage uniquement)
+        let postQFilterDays = 0; // V3.0 : 0 = tous tirages, sinon nombre de jours
         
         // Initialisation
         function init() {
@@ -2318,14 +2337,34 @@
             return { inZone: false, distance: 0, qCode: null };
         }
         
-        // Analyse les statistiques Post-Q sur tout l'historique
-        function analysePostQStats() {
+        // V3.0 : Setter du filtre temporel Post-Q
+        function setPostQFilter(jours) {
+            postQFilterDays = jours;
+            // Mettre à jour le style des boutons
+            ['all','30','20','10'].forEach(function(k) {
+                var btn = document.getElementById('btn-postq-' + k);
+                if (!btn) return;
+                var active = (k === 'all' && jours === 0) || (k === String(jours));
+                btn.style.background = active ? '#f59e0b' : '#fff';
+                btn.style.color = active ? '#fff' : '#374151';
+                btn.style.borderColor = active ? '#f59e0b' : '#d1d5db';
+            });
+            loadPostQStats();
+        }
+
+        // Analyse les statistiques Post-Q — V3.0 : paramètre joursFiltre (0 = tout)
+        function analysePostQStats(joursFiltre) {
+            if (joursFiltre === undefined) joursFiltre = 0;
+            const cutoff = joursFiltre > 0 ? new Date(Date.now() - joursFiltre * 86400000) : null;
+
             const stats = {
                 totalPostQ: 0,
                 numberCounts: {},
                 numbersByPosition: {},
                 allCounts: {},
                 allByPosition: {},
+                feticheCount: {},  // V3.0 : compteurs fétiches
+                feticheByPosition: {},
                 tiragesPostQ: []
             };
 
@@ -2333,11 +2372,18 @@
                 stats.numberCounts[n] = 0;
                 stats.numbersByPosition[n] = { 1: 0, 2: 0, 3: 0 };
             });
+            // V3.0 : initialiser fétiches
+            postQFetiche.forEach(n => {
+                stats.feticheCount[n] = 0;
+                stats.feticheByPosition[n] = { 1: 0, 2: 0, 3: 0 };
+            });
 
             tirages.forEach((tirage, index) => {
                 if (tirage.code && tirage.code.startsWith('Q')) return;
                 const postQInfo = isInPostQZone(index);
                 if (!postQInfo.inZone || !tirage.resultat) return;
+                // V3.0 : filtre temporel
+                if (cutoff && new Date(tirage.date) < cutoff) return;
 
                 stats.totalPostQ++;
                 const foundNumbers = [];
@@ -2355,6 +2401,11 @@
                         stats.numberCounts[num]++;
                         stats.numbersByPosition[num][pos + 1]++;
                         foundNumbers.push({ num: num, pos: pos + 1 });
+                    }
+                    // V3.0 : comptage fétiches
+                    if (postQFetiche.includes(num)) {
+                        stats.feticheCount[num]++;
+                        stats.feticheByPosition[num][pos + 1]++;
                     }
                 });
 
@@ -2392,61 +2443,121 @@
         
         // Charge et affiche les stats Post-Q
         function loadPostQStats() {
-            const stats = analysePostQStats();
-            
-            if (stats.totalPostQ === 0) {
-                document.getElementById('postQ-content').innerHTML = 
+            // V3.0 : on calcule TOUJOURS les stats globales pour comparaison
+            const statsAll  = analysePostQStats(0);
+            const statsFiltr = analysePostQStats(postQFilterDays);
+
+            const labelFiltre = postQFilterDays === 0 ? 'Tous tirages'
+                              : postQFilterDays === 10 ? '10 derniers jours'
+                              : postQFilterDays === 20 ? '20 derniers jours'
+                              : '30 derniers jours';
+
+            if (statsAll.totalPostQ === 0) {
+                document.getElementById('postQ-content').innerHTML =
                     '<div class="alert alert-info">Aucun tirage Post-Q dans l\'historique.</div>';
                 return;
             }
-            
+
+            // ── Compteurs de synthèse ──────────────────────────────────────
             let html = '<div class="stats-grid">';
-            html += '<div class="stat-card"><div class="stat-value">' + stats.totalPostQ + '</div><div class="stat-label">Tirages Post-Q</div></div>';
-            html += '<div class="stat-card"><div class="stat-value">' + stats.tiragesPostQ.length + '</div><div class="stat-label">Avec numéros favorisés Post-Q</div></div>';
-            html += '<div class="stat-card"><div class="stat-value">' + ((stats.tiragesPostQ.length / stats.totalPostQ) * 100).toFixed(1) + '%</div><div class="stat-label">Taux de présence</div></div>';
+            html += '<div class="stat-card"><div class="stat-value">' + statsAll.totalPostQ + '</div><div class="stat-label">Tirages Post-Q (total)</div></div>';
+            if (postQFilterDays > 0) {
+                html += '<div class="stat-card" style="border-top:3px solid #f59e0b;"><div class="stat-value" style="color:#b45309;">' + statsFiltr.totalPostQ + '</div><div class="stat-label">' + labelFiltre + '</div></div>';
+            }
+            html += '<div class="stat-card"><div class="stat-value">' + statsAll.tiragesPostQ.length + '</div><div class="stat-label">Avec numéros favorisés</div></div>';
+            html += '<div class="stat-card"><div class="stat-value">' + (statsAll.totalPostQ > 0 ? ((statsAll.tiragesPostQ.length / statsAll.totalPostQ) * 100).toFixed(1) : '—') + '%</div><div class="stat-label">Taux de présence (total)</div></div>';
             html += '</div>';
-            
-            // Fréquences par numéro
-            html += '<div class="card" style="margin-top: 20px;"><h3 style="margin-bottom: 15px;">📊 Fréquences des numéros favorisés Post-Q</h3>';
-            html += '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">';
-            
-            postQNumbers.forEach(num => {
-                const freq = stats.numberCounts[num];
-                const pct = stats.totalPostQ > 0 ? ((freq / stats.totalPostQ) * 100).toFixed(1) : 0;
-                const color = pct > 40 ? '#dc2626' : pct > 25 ? '#f59e0b' : '#3b82f6';
-                
-                html += '<div style="padding: 15px; background: #f9fafb; border-radius: 8px; border-left: 4px solid ' + color + ';">';
-                html += '<div style="font-size: 32px; font-weight: 700; color: ' + color + ';">#' + num + '</div>';
-                html += '<div style="font-size: 24px; margin: 5px 0;">' + pct + '%</div>';
-                html += '<div style="font-size: 12px; color: #6b7280;">' + freq + '/' + stats.totalPostQ + ' tirages</div>';
-                html += '</div>';
+
+            // ── Helper : bloc de fréquences pour un ensemble de numéros ───
+            function blocFrequences(titre, couleurBord, nums, getCount, total, getByPos) {
+                let b = '<div class="card" style="margin-top:18px;border-top:4px solid ' + couleurBord + ';">';
+                b += '<h3 style="margin-bottom:6px;">' + titre + '</h3>';
+                if (total === 0) { b += '<p style="color:#6b7280;font-size:13px;">Aucune donnée sur cette période.</p></div>'; return b; }
+                b += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-top:12px;">';
+                nums.forEach(function(num) {
+                    var freq = getCount(num);
+                    var pct  = total > 0 ? ((freq / total) * 100).toFixed(1) : 0;
+                    var byPos = getByPos ? getByPos(num) : null;
+                    var col  = pct > 40 ? '#dc2626' : pct > 25 ? '#f59e0b' : '#3b82f6';
+                    b += '<div style="padding:14px;background:#f9fafb;border-radius:8px;border-left:4px solid ' + col + ';">';
+                    b += '<div style="font-size:30px;font-weight:700;color:' + col + ';">#' + num + '</div>';
+                    b += '<div style="font-size:22px;margin:4px 0;">' + pct + '%</div>';
+                    b += '<div style="font-size:11px;color:#6b7280;">' + freq + '/' + total + ' tirages</div>';
+                    if (byPos) {
+                        b += '<div style="font-size:11px;color:#9ca3af;margin-top:4px;">P1:' + byPos[1] + ' P2:' + byPos[2] + ' P3:' + byPos[3] + '</div>';
+                    }
+                    b += '</div>';
+                });
+                b += '</div></div>';
+                return b;
+            }
+
+            // ── Fréquences ACTIFS (3,4,5,7) — total ──────────────────────
+            html += blocFrequences(
+                '📊 Fréquences numéros actifs Post-Q — Tous tirages (' + statsAll.totalPostQ + ')',
+                '#f59e0b', postQNumbers,
+                function(n){ return statsAll.numberCounts[n] || 0; },
+                statsAll.totalPostQ,
+                function(n){ return statsAll.numbersByPosition[n]; }
+            );
+
+            // ── Fréquences ACTIFS — filtre si activé ──────────────────────
+            if (postQFilterDays > 0) {
+                html += blocFrequences(
+                    '📊 Fréquences numéros actifs Post-Q — ' + labelFiltre + ' (' + statsFiltr.totalPostQ + ')',
+                    '#b45309', postQNumbers,
+                    function(n){ return statsFiltr.numberCounts[n] || 0; },
+                    statsFiltr.totalPostQ,
+                    function(n){ return statsFiltr.numbersByPosition[n]; }
+                );
+            }
+
+            // ── Bloc FÉTICHES (4,7,11,13) — V3.0 ─────────────────────────
+            html += '<div class="card" style="margin-top:18px;border-top:4px solid #8b5cf6;background:#faf5ff;">';
+            html += '<h3 style="color:#6d28d9;margin-bottom:4px;">⭐ Numéros fétiches — 4, 7, 11, 13</h3>';
+            html += '<p style="font-size:12px;color:#7c3aed;margin-bottom:12px;">Suivi historique — observation uniquement, sans impact sur les prédictions.</p>';
+            html += '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:14px;">';
+            ['Tous tirages', labelFiltre !== 'Tous tirages' ? labelFiltre : null].forEach(function(label, idx) {
+                if (!label) return;
+                var st = idx === 0 ? statsAll : statsFiltr;
+                html += '<div style="background:#ede9fe;border-radius:8px;padding:10px;">';
+                html += '<div style="font-weight:700;font-size:13px;color:#5b21b6;margin-bottom:8px;">📅 ' + label + ' (' + st.totalPostQ + ' tirages Post-Q)</div>';
+                html += '<div style="display:flex;gap:10px;flex-wrap:wrap;">';
+                postQFetiche.forEach(function(num) {
+                    var cnt = st.feticheCount[num] || 0;
+                    var pct = st.totalPostQ > 0 ? ((cnt / st.totalPostQ) * 100).toFixed(1) : '0.0';
+                    var col = pct > 40 ? '#7c3aed' : pct > 25 ? '#8b5cf6' : '#a78bfa';
+                    html += '<div style="text-align:center;padding:8px 12px;background:#fff;border-radius:8px;border:2px solid ' + col + ';">';
+                    html += '<div style="font-size:22px;font-weight:700;color:' + col + ';">#' + num + '</div>';
+                    html += '<div style="font-size:16px;color:' + col + ';">' + pct + '%</div>';
+                    html += '<div style="font-size:10px;color:#9ca3af;">' + cnt + '/' + st.totalPostQ + '</div>';
+                    html += '</div>';
+                });
+                html += '</div></div>';
             });
-            
             html += '</div></div>';
-            
-            // V2.26 : Section numeros dynamiques Post-Q
+
+            // ── Numéros dynamiques ────────────────────────────────────────
             const dynDisplay = getPostQDynamicNumbers(null);
             if (dynDisplay.length > 0) {
-                const dynStats = analysePostQStats();
                 html += '<div class="card" style="margin-top:15px;border-left:4px solid #10b981;"><h3 style="color:#065f46;margin-bottom:12px;">Numéros dynamiques Post-Q (historique)</h3>';
-                html += '<p style="font-size:13px;color:#6b7280;margin-bottom:12px;">Numéros en P1-P3 dans 15%+ des tirages Post-Q, hors fixes (4, 7, 11, 13).</p>';
+                html += '<p style="font-size:13px;color:#6b7280;margin-bottom:12px;">Numéros en P1-P3 dans 15%+ des tirages Post-Q, hors fixes (3, 4, 5, 7).</p>';
                 html += '<div style="display:flex;gap:12px;flex-wrap:wrap;">';
                 dynDisplay.forEach(function(num) {
-                    var cnt = dynStats.allCounts[num] || 0;
-                    var pct = dynStats.totalPostQ > 0 ? ((cnt/dynStats.totalPostQ)*100).toFixed(1) : 0;
+                    var cnt = statsAll.allCounts[num] || 0;
+                    var pct = statsAll.totalPostQ > 0 ? ((cnt / statsAll.totalPostQ) * 100).toFixed(1) : 0;
                     html += '<div style="padding:12px 18px;background:#f0fdf4;border-radius:8px;border-left:4px solid #10b981;text-align:center;">';
                     html += '<div style="font-size:28px;font-weight:700;color:#065f46;">' + num + '</div>';
                     html += '<div style="font-size:16px;color:#10b981;">' + pct + '%</div>';
-                    html += '<div style="font-size:11px;color:#6b7280;">' + cnt + '/' + dynStats.totalPostQ + '</div>';
+                    html += '<div style="font-size:11px;color:#6b7280;">' + cnt + '/' + statsAll.totalPostQ + '</div>';
                     html += '</div>';
                 });
                 html += '</div></div>';
             }
 
-            // Liste des tirages Post-Q avec numéros favorisés Post-Q
-            html += '<div class="card" style="margin-top: 20px;"><h3 style="margin-bottom: 15px;">🔍 Derniers tirages Post-Q avec numéros favorisés Post-Q</h3>';
-            
-            const recent = stats.tiragesPostQ.slice(0, 20);
+            // ── Derniers tirages Post-Q ───────────────────────────────────
+            html += '<div class="card" style="margin-top: 20px;"><h3 style="margin-bottom: 15px;">🔍 Derniers tirages Post-Q avec numéros favorisés</h3>';
+            const recent = statsAll.tiragesPostQ.slice(0, 20);
             recent.forEach(t => {
                 html += '<div style="padding: 10px; background: #fef3c7; border-radius: 6px; margin-bottom: 10px;">';
                 html += '<div style="display: flex; justify-content: space-between; align-items: center;">';
@@ -2462,13 +2573,10 @@
                     html += '<span style="position: absolute; top: -8px; right: -8px; background: #dc2626; border-radius: 50%; width: 18px; height: 18px; line-height: 18px; font-size: 10px;">P' + item.pos + '</span>';
                     html += '</span>';
                 });
-                html += '</div>';
-                html += '</div>';
-                html += '</div>';
+                html += '</div></div></div>';
             });
-            
             html += '</div>';
-            
+
             document.getElementById('postQ-content').innerHTML = html;
         }
         
@@ -4150,7 +4258,7 @@
                 nGrams,
                 methodWeights,
                 exportDate: new Date().toISOString(),
-                version: '2.19'
+                version: '3.0'
             }, null, 2);
             
             downloadFile('boulier-sauvegarde.json', data, 'application/json');
