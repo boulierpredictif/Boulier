@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V3.0</title>
+    <title>Boulier Prédictif V3.1</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -277,7 +277,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎲 Boulier Prédictif <span class="version">V3.0</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V3.2</span></h1>
             <div class="nav">
                 <button onclick="showPage('home')" class="active">
                     <span>🏠</span> <span>Accueil</span>
@@ -332,7 +332,7 @@
                 <div class="stats-grid" id="home-stats"></div>
                 
                 <div class="alert alert-info">
-                    <div class="alert-title">🚀 V3.0 — Statistiques Post-Q enrichies</div>
+                    <div class="alert-title">🚀 V3.1 — Corrections J-1/J-2 calendaires + plafond ≥10</div>
                     <ul>
                         <li><strong>Filtre temporel Post-Q</strong> : lecture des fréquences sur Tous tirages / 10 / 20 / 30 derniers jours</li>
                         <li><strong>Comparaison simultanée</strong> : affichage côte à côte "Tous tirages" et période sélectionnée</li>
@@ -927,7 +927,7 @@
 
             <!-- PAGE REGLES -->            <!-- PAGE REGLES -->
             <div id="page-rules" class="page">
-                <h2 style="margin-bottom:5px;color:#1e293b;">Règles &amp; Apprentissage — V3.0</h2>
+                <h2 style="margin-bottom:5px;color:#1e293b;">Règles &amp; Apprentissage — V3.1</h2>
                 <p style="color:#6b7280;font-size:14px;margin-bottom:20px;">Récapitulatif complet des règles empiriques et des mécanismes d'apprentissage du boulier.</p>
 
                 <!-- MÉTHODES IA -->
@@ -1119,10 +1119,10 @@
         
         // Storage
         function saveToStorage() {
-            localStorage.setItem('boulier-tirages-v213', JSON.stringify(tirages));
-            localStorage.setItem('boulier-matrices-v213', JSON.stringify(markovMatrices));
-            localStorage.setItem('boulier-ngrams-v213', JSON.stringify(nGrams));
-            localStorage.setItem('boulier-weights-v213', JSON.stringify(methodWeights));
+            localStorage.setItem('boulier-tirages-v32', JSON.stringify(tirages));
+            localStorage.setItem('boulier-matrices-v32', JSON.stringify(markovMatrices));
+            localStorage.setItem('boulier-ngrams-v32', JSON.stringify(nGrams));
+            localStorage.setItem('boulier-weights-v32', JSON.stringify(methodWeights));
             // Notification de sauvegarde automatique tous les 10 tirages
             if (tirages.length > 0 && tirages.length % 10 === 0) {
                 showSaveNotification();
@@ -1168,35 +1168,50 @@
         }
         
         function loadFromStorage() {
-            // Chercher d'abord en v29
-            let stored = localStorage.getItem('boulier-tirages-v213');
+            // Chercher d'abord en v32
+            let stored = localStorage.getItem('boulier-tirages-v32');
             
-            // Si vide, migrer automatiquement depuis v28
+            // Si vide, migrer automatiquement depuis v213
+            if (!stored) {
+                stored = localStorage.getItem('boulier-tirages-v213');
+                if (stored) {
+                    console.log('Migration automatique v213 → v32');
+                    const matrices = localStorage.getItem('boulier-matrices-v213');
+                    const ngrams   = localStorage.getItem('boulier-ngrams-v213');
+                    const weights  = localStorage.getItem('boulier-weights-v213');
+                    localStorage.setItem('boulier-tirages-v32',  stored);
+                    if (matrices) localStorage.setItem('boulier-matrices-v32', matrices);
+                    if (ngrams)   localStorage.setItem('boulier-ngrams-v32',   ngrams);
+                    if (weights)  localStorage.setItem('boulier-weights-v32',  weights);
+                }
+            }
+
+            // Si toujours vide, migrer depuis v28
             if (!stored) {
                 stored = localStorage.getItem('boulier-tirages-v212');
                 if (stored) {
-                    console.log('Migration automatique v28 → v29');
+                    console.log('Migration automatique v28 → v32');
                     // Migrer toutes les clés
                     const matrices = localStorage.getItem('boulier-matrices-v28');
                     const ngrams   = localStorage.getItem('boulier-ngrams-v28');
                     const weights  = localStorage.getItem('boulier-weights-v28');
-                    // Sauvegarder en v29 immédiatement
-                    localStorage.setItem('boulier-tirages-v213',  stored);
-                    if (matrices) localStorage.setItem('boulier-matrices-v213', matrices);
-                    if (ngrams)   localStorage.setItem('boulier-ngrams-v213',   ngrams);
-                    if (weights)  localStorage.setItem('boulier-weights-v213',  weights);
+                    // Sauvegarder en v32 immédiatement
+                    localStorage.setItem('boulier-tirages-v32',  stored);
+                    if (matrices) localStorage.setItem('boulier-matrices-v32', matrices);
+                    if (ngrams)   localStorage.setItem('boulier-ngrams-v32',   ngrams);
+                    if (weights)  localStorage.setItem('boulier-weights-v32',  weights);
                 }
             }
             
             if (stored) tirages = JSON.parse(stored);
             
-            const matrices = localStorage.getItem('boulier-matrices-v213');
+            const matrices = localStorage.getItem('boulier-matrices-v32');
             if (matrices) markovMatrices = JSON.parse(matrices);
             
-            const ngrams = localStorage.getItem('boulier-ngrams-v213');
+            const ngrams = localStorage.getItem('boulier-ngrams-v32');
             if (ngrams) nGrams = JSON.parse(ngrams);
             
-            const weights = localStorage.getItem('boulier-weights-v213');
+            const weights = localStorage.getItem('boulier-weights-v32');
             if (weights) methodWeights = JSON.parse(weights);
         }
         
@@ -1362,23 +1377,28 @@
         function checkQRecurrence(parsed, historique) {
             if (!parsed.prefixe.includes('Q')) return null;
             
-            const qTirages = historique.filter(t => 
-                t.parsed && t.parsed.prefixe.includes('Q') &&
-                t.parsed.modalite === parsed.modalite &&
-                t.parsed.max === parsed.max
-            ).slice(0, 10);
+            // FIX v3.1b : tirages Q des jours précédents uniquement
+            // On exclut le jour courant pour ne pas qu'un tirage PV/PA saisi aujourd'hui
+            // s'intercale comme faux J-1
+            const _todayStrQR = new Date().toDateString();
+            const tiragesChronos = historique
+                .filter(t =>
+                    t.resultat && t.resultat.length === 5 &&
+                    t.code && t.code.startsWith('Q') &&
+                    new Date(t.date).toDateString() !== _todayStrQR
+                )
+                .slice(0, 10); // 10 derniers tirages Q de jours précédents
             
-            if (qTirages.length < 2) return null;
+            if (tiragesChronos.length < 2) return null;
             
             let consecutiveMisses = 0;
-            let lastNumbers = [];
+            let lastNumbers = tiragesChronos[0].resultat; // J-1 calendaire réel
             
-            for (let i = 0; i < qTirages.length - 1; i++) {
-                const previous = qTirages[i].resultat;
-                const current = qTirages[i + 1].resultat;
+            for (let i = 0; i < tiragesChronos.length - 1; i++) {
+                const previous = tiragesChronos[i + 1].resultat; // plus ancien
+                const current  = tiragesChronos[i].resultat;     // plus récent
                 
-                if (i === 0) lastNumbers = previous;
-                
+                // Un numéro de "previous" est-il sorti en P1 de "current" ?
                 const hasMatch = previous.some(num => current[0] === num);
                 
                 if (!hasMatch) {
@@ -1388,13 +1408,9 @@
                 }
             }
             
-            if (qTirages.length > 0) {
-                lastNumbers = qTirages[0].resultat;
-            }
-            
             return {
                 consecutiveMisses,
-                lastNumbers,
+                lastNumbers, // = numéros du vrai dernier tirage (J-1 calendaire)
                 shouldAlert: consecutiveMisses >= 3
             };
         }
@@ -1532,21 +1548,15 @@
 
             const qNums = lastQ.resultat;
 
-            // Mesurer sur l'historique : combien de fois le P1 du tirage suivant un Q
-            // fait partie des 5 numéros de ce Q ?
             const qTirages = historique.filter(t =>
                 t.code && t.code.startsWith('Q') && t.resultat && t.resultat.length === 5
             );
-            if (qTirages.length < 3) return { nums: qNums, probability: 0, sampleSize: 0 };
+            if (qTirages.length < 3) return { nums: qNums, probability: 0, sampleSize: 0, streak: 0 };
 
             let hits = 0, total = 0;
             qTirages.forEach((qt, idx) => {
-                // Chercher le tirage immédiatement APRÈS ce Q dans la liste (historique desc)
-                // donc à l'indice idx-1 dans la liste triée desc
                 const afterIdx = idx - 1;
                 if (afterIdx >= 0) {
-                    const after = historique[afterIdx];
-                    // On cherche dans les 5 tirages qui suivent ce Q
                     for (let k = afterIdx; k >= Math.max(0, afterIdx - 5); k--) {
                         if (historique[k] && historique[k].resultat && historique[k].resultat.length > 0) {
                             if (qt.resultat.includes(historique[k].resultat[0])) hits++;
@@ -1557,8 +1567,24 @@
                 }
             });
 
+            // Calcul du streak : combien de tirages Q consécutifs (en partant du plus récent)
+            // n'ont PAS eu de numéro de J-1 (le Q précédent) en P1 ?
+            // qTirages[0] = le plus récent, qTirages[1] = avant lui, etc.
+            // Pour qTirages[i], son J-1 Q = qTirages[i+1]
+            let streak = 0;
+            for (let i = 0; i < qTirages.length - 1; i++) {
+                const current  = qTirages[i].resultat;   // le tirage courant
+                const previous = qTirages[i + 1].resultat; // son J-1 Q (tirage Q précédent)
+                const p1InPrev = previous.some(num => num === current[0]);
+                if (!p1InPrev) {
+                    streak++;
+                } else {
+                    break; // la série est interrompue
+                }
+            }
+
             const probability = total > 0 ? hits / total : 0;
-            return { nums: qNums, probability, sampleSize: total };
+            return { nums: qNums, probability, sampleSize: total, streak };
         }
 
         // ═══════════════════════════════════════════════════════════════════════
@@ -1569,10 +1595,13 @@
         //  - l'alternance du nb de ≥10 entre J et J-1
         //  - la répétition de numéros de la veille (J-1) et avant-veille (J-2)
         // Retourne un objet d'analyse complet prêt à être exploité dans la prédiction.
-        function analyseQGlissant(historique, maxCourant) {
-            // Récupérer les 30 derniers tirages Q avec résultat, triés du plus récent au plus ancien
+        function analyseQGlissant(historique, maxCourant, modaliteCourante) {
+            // Récupérer les 30 derniers tirages Q du MÊME TYPE (modalite + max) avec résultat
+            // FIX v3.1 : filtrage par type pour éviter de mélanger QA13, QH16, QP16, etc.
+            // Sans ce filtre, l'alternance ≥10/<10 compare des tirages incompatibles (ex: QH16 avec QA13)
             const tiragesQ = historique
-                .filter(t => t.code && t.code.startsWith('Q') && t.resultat && t.resultat.length === 5)
+                .filter(t => t.code && t.code.startsWith('Q') && t.resultat && t.resultat.length === 5
+                    && t.parsed && t.parsed.modalite === modaliteCourante && t.parsed.max === maxCourant)
                 .slice(0, 30);
 
             if (tiragesQ.length === 0) return null;
@@ -1610,8 +1639,28 @@
             });
 
             // ── 4. Répétition J-1 et J-2 ─────────────────────────────────────────
-            const numsJ1 = tiragesQ.length >= 1 ? tiragesQ[0].resultat : [];
-            const numsJ2 = tiragesQ.length >= 2 ? tiragesQ[1].resultat : [];
+            // FIX v3.1b : J-1 et J-2 = les 2 derniers tirages Q des jours PRÉCÉDENTS
+            // On exclut les tirages du jour même (même date calendaire que la prédiction)
+            // pour éviter qu'un PV ou autre type saisi aujourd'hui s'intercale comme "J-1"
+            // On filtre aussi sur les tirages Q uniquement car c'est la répétition inter-Q qui compte
+            const _predDay = new Date(historique[0] ? historique[0]._predDate || Date.now() : Date.now());
+            const _todayStr = new Date().toDateString();
+            const tiragesParDate = historique
+                .filter(t =>
+                    t.resultat && t.resultat.length === 5 &&
+                    t.code && t.code.startsWith('Q') &&
+                    new Date(t.date).toDateString() !== _todayStr
+                )
+                .slice(0, 2); // les 2 derniers Q avec résultat d'un jour précédent
+            const numsJ1 = tiragesParDate.length >= 1 ? tiragesParDate[0].resultat : [];
+            const numsJ2 = tiragesParDate.length >= 2 ? tiragesParDate[1].resultat : [];
+            // Mémoriser le code et la date pour les afficher dans l'alerte (transparence)
+            const labelJ1 = tiragesParDate.length >= 1
+                ? `${tiragesParDate[0].code} ${new Date(tiragesParDate[0].date).toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit'})}`
+                : 'J-1';
+            const labelJ2 = tiragesParDate.length >= 2
+                ? `${tiragesParDate[1].code} ${new Date(tiragesParDate[1].date).toLocaleDateString('fr-FR', {day:'2-digit',month:'2-digit'})}`
+                : 'J-2';
 
             // Mesure empirique : nb moyen de numéros communs J-1 sur les 30 derniers
             let totalCommJ1 = 0, totalCommJ2 = 0;
@@ -1634,26 +1683,33 @@
             const cibleTheorique  = Math.round(tauxSupTheorique * 5);
             let   cibleRecommandee = cibleTheorique;
 
-            // Règle alternance : si hier bien documenté et taux > 70%
-            if (nbSupHier !== null && tauxAlternance >= 0.70) {
-                // Viser une valeur différente de hier, proche du théorique
+            // FIX v3.1 : plafond absolu basé sur le pool réel de numéros ≥10 disponibles
+            // Pour QA13 : pool = max - 9 = 4 → cible max = floor(4 * 0.55) = 2
+            const poolSup = Math.max(0, maxCourant - 9);
+            const ciblePlafond = Math.min(Math.floor(poolSup * 0.55), 5);
+
+            // FIX v3.1 : règle alternance désactivée si échantillon < 10 tirages
+            // Sur 5 tirages, alternance 100% ne signifie rien statistiquement
+            const alternanceFiable = n >= 10;
+
+            if (alternanceFiable && nbSupHier !== null && tauxAlternance >= 0.70) {
                 if (nbSupHier === cibleTheorique) {
-                    // Hier était déjà la cible théorique → aller d'un cran dans la direction du retard
-                    const retardSup = tauxSupTheorique - tauxSupObserve; // positif si sous-représenté
+                    const retardSup = tauxSupTheorique - tauxSupObserve;
                     cibleRecommandee = retardSup > 0
                         ? Math.min(5, cibleTheorique + 1)
                         : Math.max(0, cibleTheorique - 1);
                 } else {
-                    // Hier était hors cible → corriger vers la cible, en s'éloignant de hier
-                    const dir = nbSupHier < cibleTheorique ? 1 : -1; // hier trop bas → monter
+                    const dir = nbSupHier < cibleTheorique ? 1 : -1;
                     cibleRecommandee = Math.min(5, Math.max(0, cibleTheorique + dir));
                 }
-            } else if (Math.abs(tauxSupObserve - tauxSupTheorique) > 0.15) {
-                // Retard significatif sur les 30 tirages → corriger
+            } else if (alternanceFiable && Math.abs(tauxSupObserve - tauxSupTheorique) > 0.15) {
                 cibleRecommandee = tauxSupObserve < tauxSupTheorique
-                    ? Math.min(5, cibleTheorique + 1)   // sous-représentés → forcer plus de ≥10
-                    : Math.max(0, cibleTheorique - 1);   // sur-représentés  → forcer plus de <10
+                    ? Math.min(5, cibleTheorique + 1)
+                    : Math.max(0, cibleTheorique - 1);
             }
+
+            // Appliquer le plafond absolu (pool réel ≥10 disponibles)
+            cibleRecommandee = Math.min(cibleRecommandee, ciblePlafond);
 
             return {
                 n,                      // nb de tirages Q analysés
@@ -1663,12 +1719,15 @@
                 nbSupHier,              // nb de ≥10 au dernier Q
                 nbSupAvanth,            // nb de ≥10 à l'avant-dernier Q
                 tauxSupParRang,         // [rang0..4] taux ≥10 par rang
-                numsJ1,                 // numéros du dernier Q
-                numsJ2,                 // numéros de l'avant-dernier Q
+                numsJ1,                 // numéros du dernier tirage calendaire
+                numsJ2,                 // numéros de l'avant-dernier tirage calendaire
+                labelJ1,                // ex: "QH16 07/03" pour affichage transparent
+                labelJ2,                // ex: "QA13 06/03"
                 moyCommJ1,              // nb moyen de répétitions J-1
                 moyCommJ2,              // nb moyen de répétitions J-2
                 cibleRecommandee,       // nb de ≥10 recommandé pour la prochaine prédiction
-                cibleTheorique
+                cibleTheorique,
+                alternanceFiable        // FIX v3.1 : fiabilité de la règle alternance (n >= 10)
             };
         }
 
@@ -1683,7 +1742,7 @@
 
             const { cibleRecommandee, cibleTheorique, tauxSupObserve, tauxSupTheorique,
                     nbSupHier, tauxAlternance, moyCommJ1, moyCommJ2,
-                    numsJ1, numsJ2, n, tauxSupParRang } = analyse;
+                    numsJ1, numsJ2, labelJ1, labelJ2, n, tauxSupParRang, alternanceFiable } = analyse;
 
             const nbInfCible = 5 - cibleRecommandee; // nb de <10 voulu
 
@@ -1732,17 +1791,29 @@
 
             // ── Bonus J-1 : répétition de numéros du dernier Q ───────────────────
             // Sur 30 tirages, moyenne ~1.7 numéros communs avec J-1
-            if (numsJ1.length > 0 && moyCommJ1 >= 1.0) {
-                const bonusJ1 = 3.0;
-                numsJ1.forEach(num => {
+            // ── Bonus J-1 et J-2 : calibrés sur les données empiriques réelles ────
+            // Analyse sur 33 tirages :
+            //   P1 : J-1=24.2% >> J-2=12.1%  → J-1 fort en P1
+            //   P2 : J-1=21.2% << J-2=48.5%  → J-2 domine en P2-P3
+            //   P3 : J-1=30.3% << J-2=45.5%
+            //   Global : J-1=30.3% < J-2=35.2% → J-2 légèrement > J-1 au total
+            // Donc :
+            //   bonusJ1 flat = 2.0 (présence générale) + 2.5 extra sur le 1er numéro (proxy P1)
+            //   bonusJ2 flat = 2.5 (présence générale, légèrement > J-1)
+            // Ratio effectif : J-1~2.3x vs J-2~1x en P1, quasi-égaux ailleurs
+            if (numsJ1.length > 0) {
+                const bonusJ1Flat  = 2.0;  // contribution générale J-1 (P4-P5 valables)
+                const bonusJ1P1    = 2.5;  // bonus supplémentaire P1 : J-1 domine (24.2% vs 12.1%)
+                numsJ1.forEach((num, idx) => {
                     if (scores[num] !== undefined && !exclusions.includes(num)) {
-                        scores[num] += bonusJ1;
+                        scores[num] += bonusJ1Flat;
+                        if (idx === 0) scores[num] += bonusJ1P1; // 1er numéro de J-1 = proxy P1
                     }
                 });
             }
-            // Bonus J-2 plus faible
-            if (numsJ2.length > 0 && moyCommJ2 >= 0.8) {
-                const bonusJ2 = 1.5;
+            // J-2 : flat légèrement supérieur à J-1 (P2-P3 très présents dans les données)
+            if (numsJ2.length > 0) {
+                const bonusJ2 = 2.5;  // > bonusJ1Flat car J-2 domine P2-P3 et le global
                 numsJ2.forEach(num => {
                     if (scores[num] !== undefined && !exclusions.includes(num)) {
                         scores[num] += bonusJ2;
@@ -1766,15 +1837,16 @@
                 message: `🎯 <strong>Cible prédiction Q</strong> : ${cibleRecommandee} numéro(s) ≥10 ` +
                     `et ${nbInfCible} numéro(s) <10` +
                     (nbSupHier !== null
-                        ? ` (hier : ${nbSupHier} ≥10 — alternance ${Math.round(tauxAlternance * 100)}%)`
+                        ? ` (dernier ${n < 10 ? '(⚠️ ' + n + ' tirages seulement)' : ''}: ${nbSupHier} ≥10 — alternance ${Math.round(tauxAlternance * 100)}%${!alternanceFiable ? ' — règle alternance désactivée (échantillon insuffisant)' : ''})`
                         : '')
             });
 
             if (numsJ1.length > 0) {
                 alertesQ.push({
                     type: 'info',
-                    message: `🔁 <strong>Récurrence Q</strong> : J-1 = [${numsJ1.join(', ')}] ` +
-                        `| J-2 = [${numsJ2.join(', ')}] ` +
+                    message: `🔁 <strong>Récurrence Q</strong> : ` +
+                        `J-1 <em>(${labelJ1 || 'dernier tirage'})</em> = [${numsJ1.join(', ')}] ` +
+                        `| J-2 <em>(${labelJ2 || 'avant-dernier'})</em> = [${numsJ2.join(', ')}] ` +
                         `| Moy. communs : J-1 = ${moyCommJ1.toFixed(1)} / J-2 = ${moyCommJ2.toFixed(1)}`
                 });
             }
@@ -1850,8 +1922,11 @@
             }
             
             // 1. ANALYSE DE MARKOV
+            // Niveau 1 : matrice construite sur TOUS les tirages (patterns de transitions universels)
+            // Niveau 2 : ajustement contextuel Post-Q / fréquences appliqué sur relatedTirages
             if (relatedTirages.length >= 3) {
-                const matrix = buildMarkovMatrix(typeKey, relatedTirages.slice(0, 30));
+                const allTiragesForMarkov = historique.filter(t => t.resultat && t.resultat.length === 5);
+                const matrix = buildMarkovMatrix(typeKey, allTiragesForMarkov.slice(0, 500));
                 const lastNums = relatedTirages[0].resultat;
                 
                 lastNums.forEach(num => {
@@ -1868,8 +1943,10 @@
             }
             
             // 2. N-GRAMS
+            // Niveau 1 : N-grams construits sur TOUS les tirages pour maximiser les patterns
             if (relatedTirages.length >= 5) {
-                const grams = buildNGrams(relatedTirages.slice(0, 50));
+                const allTiragesForNgrams = historique.filter(t => t.resultat && t.resultat.length === 5);
+                const grams = buildNGrams(allTiragesForNgrams.slice(0, 500));
                 const lastNums = relatedTirages[0].resultat;
                 
                 // Bigrammes
@@ -2082,21 +2159,39 @@
             }
             const qVeille = shouldCheckQVeille ? calcQVeilleP1(historique) : null;
             if (qVeille && qVeille.probability > 0.30 && qVeille.sampleSize >= 5) {
-                const bonusQVeille = qVeille.probability * 4.0; // Ex: 45% → bonus 1.8
+                // Bonus de base, amplifié par le streak (plus la série est longue, plus c'est dû)
+                const streakAmplifier = 1 + Math.min((qVeille.streak || 0) * 0.15, 0.75); // max +75%
+                const bonusQVeille = qVeille.probability * 4.0 * streakAmplifier;
                 qVeille.nums.forEach(num => {
                     if (scores[num] !== undefined) {
-                        // Bonus concentré sur P1 via empirical
                         methodScores.empirical[num] += bonusQVeille;
                     }
                 });
-                // Stocker pour l'alerte
+
+                // Alerte streak croissante
+                const streak = qVeille.streak || 0;
+                let streakMsg = '';
+                let streakType = 'info';
+                if (streak === 0) {
+                    streakMsg = ' — un numéro de J-1 était en P1 hier ✅';
+                } else if (streak === 1) {
+                    streakMsg = ` — <strong>absent depuis 1 tirage Q</strong> — probabilité légèrement accrue`;
+                    streakType = 'info';
+                } else if (streak === 2) {
+                    streakMsg = ` — <strong>absent depuis 2 tirages Q consécutifs</strong> ⚠️ — probabilité accrue`;
+                    streakType = 'warning';
+                } else if (streak >= 3) {
+                    streakMsg = ` — <strong>absent depuis ${streak} tirages Q consécutifs</strong> 🔴 — forte probabilité de retour en P1`;
+                    streakType = 'danger';
+                }
+
                 alerts.push({
-                    type: 'info',
+                    type: streakType,
                     message: '🔁 <strong>Q veille → P1</strong> : probabilité ' +
                         (qVeille.probability * 100).toFixed(0) +
                         '% qu\'un numéro du dernier Q (' +
                         qVeille.nums.join(', ') + ') sorte en P1 (sur ' +
-                        qVeille.sampleSize + ' obs.)'
+                        qVeille.sampleSize + ' obs.)' + streakMsg
                 });
             }
             
@@ -2115,7 +2210,7 @@
             // Analyse les 30 derniers Q glissants et ajuste les scores pour
             // atteindre la composition <10/≥10 recommandée par l'historique.
             if (prefixe === 'Q') {
-                const analyseQ = analyseQGlissant(historique, max);
+                const analyseQ = analyseQGlissant(historique, max, modalite); // FIX v3.1 : filtrage par type
                 const { alertesQ } = calcQTrancheBonuses(analyseQ, max, scores, exclusions);
                 alertesQ.forEach(a => alerts.push(a));
             }
@@ -2210,7 +2305,7 @@
             
             // === CORRECTIF V2.23 : QUOTA >=10/<10 pour tirages Q UNIQUEMENT ===
             if (prefixe === 'Q') {
-                var analyseQFinal = analyseQGlissant(historique, max);
+                var analyseQFinal = analyseQGlissant(historique, max, modalite); // FIX v3.1
                 if (analyseQFinal) {
                     var cibleSup = analyseQFinal.cibleRecommandee;
                     var nbSup = 0;
@@ -2272,7 +2367,7 @@
             if (qRecurrence && qRecurrence.shouldAlert) {
                 alerts.push({
                     type: 'warning',
-                    message: `⚠️ Aucun nombre du tirage précédent n'est sorti en position 1 depuis ${qRecurrence.consecutiveMisses} jours - Récurrence attendue (Surveillez: ${qRecurrence.lastNumbers.join(', ')})`
+                    message: `⚠️ Aucun nombre du dernier tirage de même type n'est sorti en position 1 depuis ${qRecurrence.consecutiveMisses} occurrences - Récurrence attendue (Surveillez: ${qRecurrence.lastNumbers.join(', ')})`
                 });
             }
             
