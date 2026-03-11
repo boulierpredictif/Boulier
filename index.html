@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V3.5</title>
+    <title>Boulier Prédictif V3.8</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -277,7 +277,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎲 Boulier Prédictif <span class="version">V3.5</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V3.8</span></h1>
             <div class="nav">
                 <button onclick="showPage('home')" class="active">
                     <span>🏠</span> <span>Accueil</span>
@@ -332,7 +332,13 @@
                 <div class="stats-grid" id="home-stats"></div>
                 
                 <div class="alert alert-info">
-                    <div class="alert-title">🔧 V3.5 — Correction règles empiriques : max uniquement, tous préfixes</div>
+                    <div class="alert-title">🔧 V3.8 — Indicateur de patterns + Correction biais grands max + NaN%</div>
+                    <ul style="margin-top:8px;padding-left:20px;font-size:13px;">
+                        <li><strong>🆕 Indicateur de patterns</strong> : affiche après chaque prédiction les probabilités marginales de 4 patterns (R1 exact, 1/5 dans top-3, 2/5 dans top-4, 3/5 dans top-3) sur les 12 derniers tirages comparables ET sur l'ensemble de l'historique, avec retard et signal de surévénement</li>
+                        <li><strong>Bug NaN%</strong> : probabilités affichées NaN% quand totalScore=0 — division par zéro corrigée</li>
+                        <li><strong>Confiance "élevée" erronée</strong> : variance=0 quand scores nuls → confidence='high' à tort — corrigé</li>
+                        <li><strong>Biais petits numéros grands max (≥17)</strong> : règles empiriques + contrainte de plage ajoutées</li>
+                    </ul>
                     <ul style="margin-left: 20px; font-size: 13px; line-height: 1.8;">
                         <li><strong>Bug corrigé</strong> : les règles empiriques de retard (<em>checkMaxNumberDelay</em>), de pattern "2 derniers → 3 premiers" (<em>checkTwoLastToThreeFirst</em>) et de récurrence inter-tirages (<em>calcRecurrenceInterTirages</em>) filtraient par modalite + max au lieu de max uniquement</li>
                         <li><strong>Résultat</strong> : un retard sur max=12 est désormais calculé sur tous les tirages A12, P12, H12, C12… confondus — comme voulu par la règle empirique d'origine</li>
@@ -2066,6 +2072,19 @@
             if (max === 16) [8, 2, 5].forEach(n => {
                 if (scores[n] !== undefined) methodScores.empirical[n] += 2.0;
             });
+            // FIX V3.8 — Règles empiriques grands max (17+) manquantes
+            if (max === 17) { [9,11,14,17].forEach(n => { if (scores[n]!==undefined) methodScores.empirical[n]+=2.0; }); }
+            if (max === 18) { [10,12,15,18].forEach(n => { if (scores[n]!==undefined) methodScores.empirical[n]+=2.0; }); }
+            if (max === 20) { [11,14,17,20].forEach(n => { if (scores[n]!==undefined) methodScores.empirical[n]+=2.0; }); }
+            if (max === 22) { [12,15,19,22].forEach(n => { if (scores[n]!==undefined) methodScores.empirical[n]+=2.0; }); }
+            if (max === 23) { [12,16,20,23].forEach(n => { if (scores[n]!==undefined) methodScores.empirical[n]+=2.0; }); }
+            if (max === 24) { [13,17,21,24].forEach(n => { if (scores[n]!==undefined) methodScores.empirical[n]+=2.0; }); }
+            if (max === 26) { [14,18,22,26].forEach(n => { if (scores[n]!==undefined) methodScores.empirical[n]+=2.0; }); }
+            if (max >= 17) {
+                if (scores[max] !== undefined) methodScores.empirical[max] += 2.5;
+                const midNum = Math.round(max / 2);
+                if (scores[midNum] !== undefined) methodScores.empirical[midNum] += 1.5;
+            }
             // Règle Max 7 spéciale : si 5 ET 2 présents dans le dernier tirage du même type
             // → forte probabilité que 7 sorte (sauf si le dernier tirage avait max > 13)
             if (max === 7) {
@@ -2340,6 +2359,34 @@
                 }
             }
             
+            // === FIX V3.8 : CONTRAINTE DE PLAGE POUR GRANDS MAX (≥17) ===
+            if (max >= 17) {
+                const seuilPlage = Math.ceil(max * 0.45);
+                const nbMinGrand = Math.min(Math.floor(max / 8) + 1, 3);
+                const nbGrandActuel = predictions.filter(n => typeof n === 'number' && n >= seuilPlage).length;
+                if (nbGrandActuel < nbMinGrand) {
+                    const manquants = nbMinGrand - nbGrandActuel;
+                    const usedSet = new Set(predictions.filter(n => typeof n === 'number'));
+                    const candidatsGrands = Object.keys(scores)
+                        .map(k => parseInt(k))
+                        .filter(n => n >= seuilPlage && !usedSet.has(n) && !exclusions.includes(n))
+                        .sort((a, b) => scores[b] - scores[a]);
+                    for (let i = 0; i < manquants && candidatsGrands.length > 0; i++) {
+                        let pireIdx = -1, pireScore = Infinity;
+                        for (let j = 0; j < predictions.length; j++) {
+                            const p = predictions[j];
+                            if (typeof p === 'number' && p < seuilPlage && scores[p] < pireScore) {
+                                pireScore = scores[p]; pireIdx = j;
+                            }
+                        }
+                        if (pireIdx === -1) break;
+                        predictions[pireIdx] = candidatsGrands.shift();
+                    }
+                    alerts.push({ type: 'info', message: `ℹ️ <strong>Plage élargie (max ${max})</strong> : ${nbMinGrand} numéro(s) ≥ ${seuilPlage} imposés pour corriger le biais Markov` });
+                }
+            }
+            // === FIN FIX V3.8 PLAGE ===
+
             // === CORRECTIF V2.23 : QUOTA >=10/<10 pour tirages Q UNIQUEMENT ===
             if (prefixe === 'Q') {
                 var analyseQFinal = analyseQGlissant(historique, max, modalite); // FIX v3.1
@@ -2373,18 +2420,25 @@
                 .slice(0, 10);
             
             const totalScore = sortedScores.reduce((sum, [, s]) => sum + s, 0);
+
+            // FIX V3.8 : guard contre division par zéro (NaN%)
             const probabilites = predictions.map(n => {
+                if (!totalScore || totalScore < 0.001) return (100 / predictions.length).toFixed(1);
                 const score = scores[n] || 0;
                 return ((score / totalScore) * 100).toFixed(1);
             });
             
-            // Calcul de la confiance
-            const variance = sortedScores.slice(0, 5).reduce((sum, [, s]) => {
-                const mean = totalScore / 5;
-                return sum + Math.pow(s - mean, 2);
-            }, 0) / 5;
-            
-            const confidence = variance < 2 ? 'high' : variance < 5 ? 'medium' : 'low';
+            // FIX V3.8 : confiance basse si totalScore nul (évite 'high' artificiel)
+            let confidence;
+            if (!totalScore || totalScore < 0.01) {
+                confidence = 'low';
+            } else {
+                const variance = sortedScores.slice(0, 5).reduce((sum, [, s]) => {
+                    const mean = totalScore / 5;
+                    return sum + Math.pow(s - mean, 2);
+                }, 0) / 5;
+                confidence = variance < 2 ? 'high' : variance < 5 ? 'medium' : 'low';
+            }
             
             // Génération des alertes
             
@@ -3031,6 +3085,11 @@
                 html += '</div>';
             }
             
+            // === V3.8 : WIDGET PATTERNS MARGINAUX ===
+            const analysePatterns = analyserPatterns(tirages);
+            html += renderPatternsWidget(analysePatterns);
+            // === FIN WIDGET PATTERNS ===
+
             // Formulaire de saisie du résultat
             html += '<div style="margin-top: 25px; padding: 20px; background: #f9fafb; border-radius: 8px;">';
             html += '<h4 style="margin-bottom: 15px; color: #374151;">💾 Enregistrer le résultat du tirage</h4>';
@@ -3049,6 +3108,75 @@
             document.getElementById('prediction-result').innerHTML = html;
         }
         
+        // ═══════════════════════════════════════════════════════════════════
+        // V3.8 — INDICATEUR DE PATTERNS MARGINAUX
+        // Analyse 4 patterns sur les tirages ayant prediction+resultat :
+        //   P1  : prédiction[0] === resultat[0]  (numéro exact au rang 1)
+        //   T31 : au moins 1 des 5 préd dans les 3 premiers résultats
+        //   T42 : au moins 2 des 5 préd dans les 4 premiers résultats
+        //   T33 : au moins 3 des 5 préd dans les 3 premiers résultats
+        // Pour chaque pattern → taux global, taux 12 derniers, retard actuel
+        // ═══════════════════════════════════════════════════════════════════
+        function analyserPatterns(tirages) {
+            const evaluables = tirages.filter(t =>
+                t.prediction && t.prediction.length >= 5 &&
+                t.resultat && t.resultat.length >= 3
+            ).sort((a, b) => new Date(b.date) - new Date(a.date));
+
+            if (evaluables.length < 3) return null;
+
+            const patterns = [
+                { key: 'r1',  label: 'placé 1 numéro au rang 1',            test: (p, r) => p[0] === r[0] },
+                { key: 't42', label: 'placé 2 numéros dans les 4 premiers',  test: (p, r) => r.slice(0,4).filter(n => p.includes(n)).length >= 2 },
+                { key: 't32', label: 'placé 2 numéros dans les 3 premiers',  test: (p, r) => r.slice(0,3).filter(n => p.includes(n)).length >= 2 },
+                { key: 't33', label: 'placé 3 numéros dans les 3 premiers',  test: (p, r) => r.slice(0,3).filter(n => p.includes(n)).length >= 3 }
+            ];
+
+            return patterns.map(({ key, label, test }) => {
+                let retard = 0;
+                for (const t of evaluables) {
+                    if (test(t.prediction, t.resultat)) break;
+                    retard++;
+                }
+                const total = evaluables.length;
+                const hits  = evaluables.filter(t => test(t.prediction, t.resultat)).length;
+                const freqMoy = hits > 0 ? (total / hits) : null;
+                return { key, label, retard, total, hits, freqMoy };
+            });
+        }
+
+        function renderPatternsWidget(patterns) {
+            if (!patterns) return '';
+
+            let html = `<div style="margin-top:20px;padding:16px 20px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">`;
+            html += `<h4 style="margin-bottom:14px;color:#1e293b;font-size:14px;font-weight:700;">⏳ Performances clés — retard en cours</h4>`;
+
+            patterns.forEach(d => {
+                const dû = d.freqMoy !== null && d.retard >= Math.round(d.freqMoy);
+                const bg      = d.retard === 0 ? '#d1fae5' : dû ? '#fee2e2' : '#f1f5f9';
+                const bordure = d.retard === 0 ? '#10b981' : dû ? '#dc2626' : '#cbd5e1';
+
+                html += `<div style="padding:12px 16px;background:${bg};border-left:4px solid ${bordure};border-radius:6px;margin-bottom:10px;font-size:13px;color:#1e293b;">`;
+
+                if (d.retard === 0) {
+                    html += `✅ La prédiction vient de <strong>${d.label}</strong> au dernier tirage.`;
+                } else if (dû) {
+                    html += `⚠️ <strong>Attention</strong> — il y a <strong>${d.retard} tirage${d.retard > 1 ? 's' : ''}</strong> que la prédiction n'a pas <strong>${d.label}</strong>`;
+                    if (d.freqMoy) html += ` (fréquence habituelle : 1 fois toutes les ${d.freqMoy.toFixed(1)})`;
+                    html += `. <strong>Cela risque maintenant de survenir.</strong>`;
+                } else {
+                    html += `ℹ️ Il y a <strong>${d.retard} tirage${d.retard > 1 ? 's' : ''}</strong> que la prédiction n'a pas <strong>${d.label}</strong>`;
+                    if (d.freqMoy) html += ` (fréquence habituelle : 1 fois toutes les ${d.freqMoy.toFixed(1)})`;
+                    html += `.`;
+                }
+
+                html += `</div>`;
+            });
+
+            html += `</div>`;
+            return html;
+        }
+
         function evaluerPrediction(prediction, resultat, max, code) {
             // Déterminer le type de tirage
             const isQ  = code && code.startsWith('Q');
