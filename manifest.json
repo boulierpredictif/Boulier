@@ -1,13 +1,13 @@
 {
   "name": "Boulier Prédictif",
   "short_name": "Boulier",
-  "description": "Boulier Prédictif V2.26 — Outil de prédiction et analyse",
+  "description": "Outil prédictif pour boulier électrique",
   "start_url": "/Boulier/",
   "scope": "/Boulier/",
   "display": "standalone",
+  "background_color": "#0D1B3E",
+  "theme_color": "#0D1B3E",
   "orientation": "portrait",
-  "background_color": "#ffffff",
-  "theme_color": "#4f46e5",
   "icons": [
     {
       "src": "icon-192.png",
