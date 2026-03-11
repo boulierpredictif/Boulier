@@ -1,4 +1,4 @@
-const CACHE_NAME = 'boulier-v2-27';
+const CACHE_NAME = 'boulier-v3-8';
 const urlsToCache = [
   '/Boulier/',
   '/Boulier/index.html'
@@ -30,19 +30,22 @@ self.addEventListener('activate', function(event) {
 
 self.addEventListener('fetch', function(event) {
   event.respondWith(
-    caches.match(event.request).then(function(response) {
-      if (response) return response;
-      return fetch(event.request).then(function(response) {
-        if (!response || response.status !== 200 || response.type !== 'basic') {
-          return response;
-        }
-        var responseToCache = response.clone();
-        caches.open(CACHE_NAME).then(function(cache) {
-          cache.put(event.request, responseToCache);
-        });
+    // NETWORK-FIRST : on tente toujours le réseau en priorité
+    // Si le réseau répond → on met à jour le cache et on sert la nouvelle version
+    // Si le réseau échoue (hors-ligne) → on sert le cache
+    fetch(event.request).then(function(response) {
+      if (!response || response.status !== 200 || response.type !== 'basic') {
         return response;
-      }).catch(function() {
-        return caches.match('/Boulier/index.html');
+      }
+      var responseToCache = response.clone();
+      caches.open(CACHE_NAME).then(function(cache) {
+        cache.put(event.request, responseToCache);
+      });
+      return response;
+    }).catch(function() {
+      // Hors-ligne : fallback sur le cache
+      return caches.match(event.request).then(function(cached) {
+        return cached || caches.match('/Boulier/index.html');
       });
     })
   );
