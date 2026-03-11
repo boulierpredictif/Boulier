@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V3.1</title>
+    <title>Boulier Prédictif V3.5</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -277,7 +277,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎲 Boulier Prédictif <span class="version">V3.2</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V3.5</span></h1>
             <div class="nav">
                 <button onclick="showPage('home')" class="active">
                     <span>🏠</span> <span>Accueil</span>
@@ -332,6 +332,25 @@
                 <div class="stats-grid" id="home-stats"></div>
                 
                 <div class="alert alert-info">
+                    <div class="alert-title">🔧 V3.5 — Correction règles empiriques : max uniquement, tous préfixes</div>
+                    <ul style="margin-left: 20px; font-size: 13px; line-height: 1.8;">
+                        <li><strong>Bug corrigé</strong> : les règles empiriques de retard (<em>checkMaxNumberDelay</em>), de pattern "2 derniers → 3 premiers" (<em>checkTwoLastToThreeFirst</em>) et de récurrence inter-tirages (<em>calcRecurrenceInterTirages</em>) filtraient par modalite + max au lieu de max uniquement</li>
+                        <li><strong>Résultat</strong> : un retard sur max=12 est désormais calculé sur tous les tirages A12, P12, H12, C12… confondus — comme voulu par la règle empirique d'origine</li>
+                        <li><strong>Alerte retard</strong> : le libellé indique maintenant "max 12 (toutes modalités)" au lieu de "A12"</li>
+                        <li><strong>Non modifié</strong> : <em>analyseQGlissant</em> (conserve le filtre modalite+max par conception — mélanger QA13 et QH16 serait incohérent) et le moteur Markov/fréquences principal (idem)</li>
+                    </ul>
+                    <div class="alert-title">🔴 V3.4 — Correctif majeur : intégrité temporelle des prédictions</div>
+                    <ul style="margin-left: 20px; font-size: 13px; line-height: 1.8;">
+                        <li><strong>Bug critique corrigé</strong> : lors d'une prédiction pour une date passée (saisie rétroactive), le moteur utilisait des tirages "futurs" (chronologiquement postérieurs à la date de prédiction) — corrompant Q-veille, J-1/J-2, zone Post-Q, retards et récurrences</li>
+                        <li><strong>Correction</strong> : l'historique est désormais filtré et trié au tout début de <code>calculerPrediction</code> pour n'inclure que les tirages strictement antérieurs à la date de prédiction — quelle que soit l'ordre de saisie dans le boulier</li>
+                        <li><strong>Impact</strong> : les prédictions générées en temps réel (date du jour) ne sont pas affectées. Les prédictions rétroactives sont maintenant cohérentes avec leur contexte historique réel</li>
+                    </ul>
+                    <div class="alert-title">🚀 V3.3 — Q-veille corrigé + Post-Q5 + Élasticité numéro</div>
+                    <ul style="margin-left: 20px; font-size: 13px; line-height: 1.8;">
+                        <li><strong>Fix Q-veille</strong> : l'alerte "Q veille → P1" ne se déclenche désormais que pour les prédictions de type Q (jamais pour A, H, S…). Fenêtre étendue à 48h avec atténuation ×0.5 pour J-2</li>
+                        <li><strong>Post-Q5</strong> : nouvelle section dans Stats Post-Q affichant les fréquences sur les 5 premiers tirages après Q, avec ventilation max&gt;10 / max≤10</li>
+                        <li><strong>Élasticité numéro</strong> : tableau de distribution par distance (1→10) pour chaque numéro, classé par vitesse de sortie moyenne (précoce, distribué, tardif)</li>
+                    </ul>
                     <div class="alert-title">🚀 V3.1 — Corrections J-1/J-2 calendaires + plafond ≥10</div>
                     <ul>
                         <li><strong>Filtre temporel Post-Q</strong> : lecture des fréquences sur Tous tirages / 10 / 20 / 30 derniers jours</li>
@@ -1350,8 +1369,9 @@
                 criticalNumbers.push(max);
             }
             
+            // V3.5 FIX : règle empirique sur le max uniquement — tous préfixes confondus (A12, P12, H12…)
             const relatedTirages = historique.filter(t => 
-                t.parsed && t.parsed.modalite === modalite && t.parsed.max === max
+                t.parsed && t.parsed.max === max
             ).slice(0, 30);
             
             const delays = {};
@@ -1448,9 +1468,9 @@
             );
             if (qApres) return null;
 
-            // On est dans les 6 premiers tirages du jour → règle active
+            // V3.5 FIX : règle empirique sur le max uniquement — tous préfixes confondus
             const relatedTirages = historique.filter(t =>
-                t.parsed && t.parsed.modalite === modalite && t.parsed.max === max &&
+                t.parsed && t.parsed.max === max &&
                 t.resultat && t.resultat.length === 5
             ).slice(0, 20);
 
@@ -1491,10 +1511,9 @@
         // Retourne un objet { num → score de récurrence } pour les numéros les plus récurrents.
         function calcRecurrenceInterTirages(parsed, historique) {
             const typeKey = parsed.modalite + parsed.max;
-            // Tirages du même type ayant un résultat, du plus récent au plus ancien
+            // V3.5 FIX : règle empirique sur le max uniquement — tous préfixes confondus
             const same = historique.filter(t =>
-                t.parsed && t.parsed.modalite === parsed.modalite &&
-                t.parsed.max === parsed.max && t.resultat && t.resultat.length >= 3
+                t.parsed && t.parsed.max === parsed.max && t.resultat && t.resultat.length >= 3
             );
             if (same.length < 4) return {};
 
@@ -1878,6 +1897,16 @@
         function calculerPrediction(parsed, historique, exclusions) {
             const { modalite, max, prefixe } = parsed;
             const alerts = []; // Déclaré ici pour être accessible partout dans la fonction
+
+            // V3.4 FIX CRITIQUE : filtrer l'historique pour n'inclure que les tirages
+            // STRICTEMENT ANTÉRIEURS à la date de prédiction.
+            // Sans ce filtre, une prédiction saisie rétrospectivement (date passée) utilise
+            // des tirages "futurs" (saisis plus tard mais chronologiquement après), ce qui
+            // corrompt toutes les analyses temporelles : Q-veille, J-1/J-2, Post-Q, retards, etc.
+            const predDateObj = parsed._predDate ? new Date(parsed._predDate) : new Date();
+            historique = historique
+                .filter(t => new Date(t.date) < predDateObj)
+                .sort((a, b) => new Date(b.date) - new Date(a.date));
             const scores = {};
             const methodScores = {
                 markov: {},
@@ -2143,25 +2172,32 @@
                 }
             }
 
-            // 5f. Q VEILLE → P1 : probabilité qu'un numéro du dernier Q sorte en P1
-            // BUG 4 FIX : n'appeler que si le dernier Q connu (avec résultat réel) est dans les 24h
-            // IMPORTANT : filtrer sur t.resultat pour exclure les prédictions Q sans résultat
+            // 5f. Q VEILLE → P1 : probabilité qu'un numéro du Q d'hier/avant-hier sorte en P1 du prochain Q
+            // V3.3 FIX : ne s'applique QUE si la prédiction en cours est de type Q
+            //            Fenêtre : 0-24h → bonus plein | 24-48h → bonus atténué x0.5 | >48h → rien
             const lastQForVeille = historique.find(t =>
                 t.code && t.code.startsWith('Q') &&
                 t.resultat && t.resultat.length === 5
             );
-            const predDateObjForVeille = parsed._predDate ? new Date(parsed._predDate) : new Date();
+            const predDateObjForVeille = predDateObj;
             let shouldCheckQVeille = false;
-            if (lastQForVeille) {
+            let qVeilleAttenuation = 1.0; // 1.0 = plein, 0.5 = atténué (24-48h)
+            if (prefixe === 'Q' && lastQForVeille) {
                 const qDateVeille = new Date(lastQForVeille.date);
                 const diffHoursVeille = (predDateObjForVeille - qDateVeille) / (1000 * 60 * 60);
-                shouldCheckQVeille = diffHoursVeille >= 0 && diffHoursVeille <= 24;
+                if (diffHoursVeille >= 0 && diffHoursVeille <= 24) {
+                    shouldCheckQVeille = true;
+                    qVeilleAttenuation = 1.0;
+                } else if (diffHoursVeille > 24 && diffHoursVeille <= 48) {
+                    shouldCheckQVeille = true;
+                    qVeilleAttenuation = 0.5; // surlendemain : signal atténué
+                }
             }
             const qVeille = shouldCheckQVeille ? calcQVeilleP1(historique) : null;
             if (qVeille && qVeille.probability > 0.30 && qVeille.sampleSize >= 5) {
                 // Bonus de base, amplifié par le streak (plus la série est longue, plus c'est dû)
                 const streakAmplifier = 1 + Math.min((qVeille.streak || 0) * 0.15, 0.75); // max +75%
-                const bonusQVeille = qVeille.probability * 4.0 * streakAmplifier;
+                const bonusQVeille = qVeille.probability * 4.0 * streakAmplifier * qVeilleAttenuation;
                 qVeille.nums.forEach(num => {
                     if (scores[num] !== undefined) {
                         methodScores.empirical[num] += bonusQVeille;
@@ -2185,9 +2221,10 @@
                     streakType = 'danger';
                 }
 
+                const qVeilleLabel = qVeilleAttenuation < 1 ? 'Q avant-hier → P1 (J-2, signal atténué)' : 'Q veille → P1';
                 alerts.push({
                     type: streakType,
-                    message: '🔁 <strong>Q veille → P1</strong> : probabilité ' +
+                    message: '🔁 <strong>' + qVeilleLabel + '</strong> : probabilité ' +
                         (qVeille.probability * 100).toFixed(0) +
                         '% qu\'un numéro du dernier Q (' +
                         qVeille.nums.join(', ') + ') sorte en P1 (sur ' +
@@ -2358,7 +2395,7 @@
                     if (delay >= 5) {
                         alerts.push({
                             type: 'warning',
-                            message: `⚠️ Le nombre ${num} n'est pas sorti depuis ${delay} tirages ${typeKey} - Probabilité accrue`
+                            message: `⚠️ Le nombre ${num} n'est pas sorti depuis ${delay} tirages à max ${max} (toutes modalités) - Probabilité accrue`
                         });
                     }
                 }
@@ -2448,8 +2485,10 @@
         }
 
         // Analyse les statistiques Post-Q — V3.0 : paramètre joursFiltre (0 = tout)
-        function analysePostQStats(joursFiltre) {
+        // V3.3 : ajout distrib (élasticité), postQ5, ventilation max>10
+        function analysePostQStats(joursFiltre, fenetre) {
             if (joursFiltre === undefined) joursFiltre = 0;
+            if (fenetre === undefined) fenetre = 10; // 10 = standard, 5 = Post-Q5
             const cutoff = joursFiltre > 0 ? new Date(Date.now() - joursFiltre * 86400000) : null;
 
             const stats = {
@@ -2458,16 +2497,25 @@
                 numbersByPosition: {},
                 allCounts: {},
                 allByPosition: {},
-                feticheCount: {},  // V3.0 : compteurs fétiches
+                allDistrib: {},      // V3.3 : distrib[num][distance] = count
+                allCountsSup: {},    // V3.3 : tirages max>10
+                allCountsInf: {},    // V3.3 : tirages max<=10
+                feticheCount: {},
                 feticheByPosition: {},
-                tiragesPostQ: []
+                tiragesPostQ: [],
+                // V3.3 Post-Q5
+                totalPostQ5: 0,
+                totalPostQ5Sup: 0,   // parmi ceux à max>10
+                totalPostQ5Inf: 0,
+                allCounts5: {},
+                allCounts5Sup: {},
+                allCounts5Inf: {}
             };
 
             postQNumbers.forEach(n => {
                 stats.numberCounts[n] = 0;
                 stats.numbersByPosition[n] = { 1: 0, 2: 0, 3: 0 };
             });
-            // V3.0 : initialiser fétiches
             postQFetiche.forEach(n => {
                 stats.feticheCount[n] = 0;
                 stats.feticheByPosition[n] = { 1: 0, 2: 0, 3: 0 };
@@ -2477,27 +2525,60 @@
                 if (tirage.code && tirage.code.startsWith('Q')) return;
                 const postQInfo = isInPostQZone(index);
                 if (!postQInfo.inZone || !tirage.resultat) return;
-                // V3.0 : filtre temporel
                 if (cutoff && new Date(tirage.date) < cutoff) return;
+
+                // Fenêtre standard (10) ou réduite (5)
+                if (postQInfo.distance > fenetre) return;
 
                 stats.totalPostQ++;
                 const foundNumbers = [];
+                // Déterminer si ce tirage est à max > 10
+                const tirageMax = tirage.parsed ? tirage.parsed.max : null;
+                const isSup = tirageMax !== null && tirageMax > 10;
+
+                // V3.3 Post-Q5 : comptage séparé pour distance 1-5
+                if (postQInfo.distance <= 5) {
+                    stats.totalPostQ5++;
+                    if (isSup) stats.totalPostQ5Sup++;
+                    else stats.totalPostQ5Inf++;
+                }
 
                 tirage.resultat.forEach((num, pos) => {
                     if (pos >= 3) return;
+                    // ── Compteurs standard ──
                     if (!stats.allCounts[num]) {
                         stats.allCounts[num] = 0;
                         stats.allByPosition[num] = { 1: 0, 2: 0, 3: 0 };
+                        stats.allDistrib[num] = {};
+                        stats.allCountsSup[num] = 0;
+                        stats.allCountsInf[num] = 0;
                     }
                     stats.allCounts[num]++;
                     stats.allByPosition[num][pos + 1]++;
+                    // V3.3 élasticité : incrémenter la distance
+                    const d = postQInfo.distance;
+                    stats.allDistrib[num][d] = (stats.allDistrib[num][d] || 0) + 1;
+                    // V3.3 ventilation max
+                    if (isSup) stats.allCountsSup[num]++;
+                    else stats.allCountsInf[num]++;
+
+                    // ── Post-Q5 ──
+                    if (postQInfo.distance <= 5) {
+                        if (!stats.allCounts5[num]) {
+                            stats.allCounts5[num] = 0;
+                            stats.allCounts5Sup[num] = 0;
+                            stats.allCounts5Inf[num] = 0;
+                        }
+                        stats.allCounts5[num]++;
+                        if (isSup) stats.allCounts5Sup[num]++;
+                        else stats.allCounts5Inf[num]++;
+                    }
 
                     if (postQNumbers.includes(num)) {
                         stats.numberCounts[num]++;
                         stats.numbersByPosition[num][pos + 1]++;
                         foundNumbers.push({ num: num, pos: pos + 1 });
                     }
-                    // V3.0 : comptage fétiches
                     if (postQFetiche.includes(num)) {
                         stats.feticheCount[num]++;
                         stats.feticheByPosition[num][pos + 1]++;
@@ -2670,6 +2751,140 @@
                 });
                 html += '</div></div></div>';
             });
+            html += '</div>';
+
+            // ═══════════════════════════════════════════════════════════════
+            // V3.3 ── SECTION POST-Q5 (tirages 1-5 après Q) ─────────────────
+            // ═══════════════════════════════════════════════════════════════
+            html += '<div class="card" style="margin-top:28px;border-top:4px solid #0ea5e9;background:#f0f9ff;">';
+            html += '<h3 style="color:#0369a1;margin-bottom:4px;">📐 Post-Q5 — Analyse des 5 premiers tirages après Q</h3>';
+            html += '<p style="font-size:12px;color:#0284c7;margin-bottom:16px;">Statistiques restreintes aux 5 tirages non-Q immédiatement après un Q — notamment utile pour les journées Q en fin de journée.</p>';
+
+            if (statsAll.totalPostQ5 === 0) {
+                html += '<p style="color:#6b7280;font-size:13px;">Pas encore assez de données Post-Q5.</p>';
+            } else {
+                // Totaux Post-Q5
+                html += '<div class="stats-grid" style="margin-bottom:16px;">';
+                html += '<div class="stat-card" style="border-top:3px solid #0ea5e9;"><div class="stat-value" style="color:#0369a1;">' + statsAll.totalPostQ5 + '</div><div class="stat-label">Tirages Post-Q5</div></div>';
+                html += '<div class="stat-card" style="border-top:3px solid #10b981;"><div class="stat-value" style="color:#065f46;">' + statsAll.totalPostQ5Sup + '</div><div class="stat-label">Dont max &gt; 10</div></div>';
+                html += '<div class="stat-card" style="border-top:3px solid #f59e0b;"><div class="stat-value" style="color:#92400e;">' + statsAll.totalPostQ5Inf + '</div><div class="stat-label">Dont max ≤ 10</div></div>';
+                html += '</div>';
+
+                // Tableau de fréquences Post-Q5
+                const allNums5 = Object.keys(statsAll.allCounts5).map(Number).sort((a,b) => (statsAll.allCounts5[b]||0)-(statsAll.allCounts5[a]||0)).slice(0, 12);
+                if (allNums5.length > 0) {
+                    html += '<h4 style="color:#0369a1;margin-bottom:8px;font-size:14px;">Top numéros en P1-P3 (Post-Q5, tous max)</h4>';
+                    html += '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px;">';
+                    allNums5.forEach(function(num) {
+                        var cnt  = statsAll.allCounts5[num] || 0;
+                        var pct  = statsAll.totalPostQ5 > 0 ? ((cnt / statsAll.totalPostQ5) * 100).toFixed(1) : 0;
+                        var cntS = statsAll.allCounts5Sup[num] || 0;
+                        var cntI = statsAll.allCounts5Inf[num] || 0;
+                        var pctS = statsAll.totalPostQ5Sup > 0 ? ((cntS / statsAll.totalPostQ5Sup) * 100).toFixed(1) : '—';
+                        var pctI = statsAll.totalPostQ5Inf > 0 ? ((cntI / statsAll.totalPostQ5Inf) * 100).toFixed(1) : '—';
+                        var col  = pct > 40 ? '#0369a1' : pct > 25 ? '#0ea5e9' : '#7dd3fc';
+                        var isSup10 = num >= 10;
+                        html += '<div style="padding:12px;background:' + (isSup10 ? '#e0f2fe' : '#fff') + ';border-radius:8px;border-left:4px solid ' + col + ';position:relative;">';
+                        if (isSup10) html += '<span style="position:absolute;top:4px;right:6px;font-size:9px;background:#0ea5e9;color:#fff;padding:1px 5px;border-radius:8px;">≥10</span>';
+                        html += '<div style="font-size:26px;font-weight:700;color:' + col + ';">#' + num + '</div>';
+                        html += '<div style="font-size:20px;margin:2px 0;color:#0369a1;">' + pct + '%</div>';
+                        html += '<div style="font-size:10px;color:#6b7280;">' + cnt + '/' + statsAll.totalPostQ5 + '</div>';
+                        html += '<div style="font-size:10px;color:#0284c7;margin-top:4px;">max&gt;10: ' + pctS + '% | ≤10: ' + pctI + '%</div>';
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                }
+            }
+            html += '</div>';
+
+            // ═══════════════════════════════════════════════════════════════
+            // V3.3 ── ÉLASTICITÉ NUMÉRO (vitesse de sortie après Q) ─────────
+            // ═══════════════════════════════════════════════════════════════
+            html += '<div class="card" style="margin-top:28px;border-top:4px solid #8b5cf6;background:#faf5ff;">';
+            html += '<h3 style="color:#6d28d9;margin-bottom:4px;">⚡ Élasticité numéro — Vitesse de sortie après Q</h3>';
+            html += '<p style="font-size:12px;color:#7c3aed;margin-bottom:16px;">Pour chaque numéro, distribution des distances post-Q auxquelles il sort. Un numéro <strong>élastique précoce</strong> (distances 1-3) sort très vite après le Q. Un numéro <strong>élastique tardif</strong> (distances 7-10) sort plutôt en fin de fenêtre.</p>';
+
+            // Calculer l'élasticité pour tous les numéros qui ont au moins 3 occurrences
+            const elastNums = Object.keys(statsAll.allDistrib)
+                .map(Number)
+                .filter(num => (statsAll.allCounts[num] || 0) >= 3)
+                .sort((a,b) => {
+                    // Trier par distance médiane croissante (plus précoce en premier)
+                    var dA = statsAll.allDistrib[a], dB = statsAll.allDistrib[b];
+                    var mA = 0, mB = 0, tA = 0, tB = 0;
+                    for (var d = 1; d <= 10; d++) { mA += d * (dA[d]||0); tA += (dA[d]||0); }
+                    for (var d = 1; d <= 10; d++) { mB += d * (dB[d]||0); tB += (dB[d]||0); }
+                    return (tA>0?mA/tA:99) - (tB>0?mB/tB:99);
+                });
+
+            if (elastNums.length === 0) {
+                html += '<p style="color:#6b7280;font-size:13px;">Pas encore assez de données (minimum 3 occurrences par numéro).</p>';
+            } else {
+                html += '<div style="overflow-x:auto;">';
+                html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+                html += '<thead><tr style="background:#ede9fe;">';
+                html += '<th style="padding:8px;text-align:left;color:#5b21b6;">Num</th>';
+                html += '<th style="padding:8px;text-align:center;color:#5b21b6;">Total</th>';
+                html += '<th style="padding:8px;text-align:center;color:#10b981;">Précoce<br><small>dist 1-3</small></th>';
+                html += '<th style="padding:8px;text-align:center;color:#f59e0b;">Médian<br><small>dist 4-7</small></th>';
+                html += '<th style="padding:8px;text-align:center;color:#ef4444;">Tardif<br><small>dist 8-10</small></th>';
+                html += '<th style="padding:8px;text-align:center;color:#6d28d9;">Dist moy.</th>';
+                html += '<th style="padding:8px;text-align:left;color:#6d28d9;">Distribution (dist 1→10)</th>';
+                html += '</tr></thead><tbody>';
+
+                elastNums.forEach(function(num, i) {
+                    var distrib = statsAll.allDistrib[num] || {};
+                    var total = statsAll.allCounts[num] || 0;
+                    var precoce = 0, median_ = 0, tardif = 0, somme = 0;
+                    for (var d = 1; d <= 3; d++) precoce += (distrib[d]||0);
+                    for (var d = 4; d <= 7; d++) median_ += (distrib[d]||0);
+                    for (var d = 8; d <= 10; d++) tardif += (distrib[d]||0);
+                    for (var d = 1; d <= 10; d++) somme += d * (distrib[d]||0);
+                    var distMoy = total > 0 ? (somme / total).toFixed(1) : '—';
+
+                    // Profil dominant
+                    var profil = '', profilCol = '#374151';
+                    var pPct = total > 0 ? precoce/total : 0;
+                    var tPct = total > 0 ? tardif/total : 0;
+                    if (pPct >= 0.5) { profil = '⚡ Très précoce'; profilCol = '#10b981'; }
+                    else if (pPct >= 0.35) { profil = '↑ Précoce'; profilCol = '#34d399'; }
+                    else if (tPct >= 0.4) { profil = '↓ Tardif'; profilCol = '#ef4444'; }
+                    else { profil = '~ Distribué'; profilCol = '#6b7280'; }
+
+                    var isSup = num >= 10;
+                    var bg = i % 2 === 0 ? '#fdf4ff' : '#fff';
+                    html += '<tr style="background:' + bg + ';border-bottom:1px solid #ede9fe;">';
+                    html += '<td style="padding:8px;font-weight:700;color:#5b21b6;">';
+                    html += '#' + num + (isSup ? ' <span style="font-size:9px;background:#0ea5e9;color:#fff;padding:1px 4px;border-radius:4px;">≥10</span>' : '');
+                    html += '</td>';
+                    html += '<td style="padding:8px;text-align:center;">' + total + '</td>';
+                    html += '<td style="padding:8px;text-align:center;color:#10b981;">' + precoce + ' <small>(' + (total>0?(precoce/total*100).toFixed(0):0) + '%)</small></td>';
+                    html += '<td style="padding:8px;text-align:center;color:#d97706;">' + median_ + ' <small>(' + (total>0?(median_/total*100).toFixed(0):0) + '%)</small></td>';
+                    html += '<td style="padding:8px;text-align:center;color:#ef4444;">' + tardif + ' <small>(' + (total>0?(tardif/total*100).toFixed(0):0) + '%)</small></td>';
+                    html += '<td style="padding:8px;text-align:center;font-weight:700;color:' + profilCol + ';">' + distMoy + '</td>';
+                    // Mini-barres pour chaque distance 1-10
+                    html += '<td style="padding:8px;">';
+                    html += '<div style="display:flex;gap:2px;align-items:flex-end;height:28px;">';
+                    var maxBar = 0;
+                    for (var d = 1; d <= 10; d++) maxBar = Math.max(maxBar, distrib[d]||0);
+                    for (var d = 1; d <= 10; d++) {
+                        var cnt = distrib[d] || 0;
+                        var h = maxBar > 0 ? Math.max(3, Math.round((cnt / maxBar) * 24)) : 3;
+                        var barCol = d <= 3 ? '#10b981' : d <= 7 ? '#f59e0b' : '#ef4444';
+                        html += '<div title="dist ' + d + ': ' + cnt + 'x" style="width:14px;height:' + h + 'px;background:' + (cnt>0?barCol:'#e5e7eb') + ';border-radius:2px 2px 0 0;"></div>';
+                    }
+                    html += '</div>';
+                    html += '<div style="display:flex;gap:2px;margin-top:1px;">';
+                    for (var d = 1; d <= 10; d++) {
+                        html += '<div style="width:14px;text-align:center;font-size:8px;color:#9ca3af;">' + d + '</div>';
+                    }
+                    html += '</div>';
+                    html += '</td>';
+                    html += '</tr>';
+                });
+                html += '</tbody></table></div>';
+                html += '<p style="font-size:11px;color:#9ca3af;margin-top:8px;">Numéros triés par distance moyenne croissante (plus précoce en premier). Minimum 3 occurrences pour figurer. Barres vertes = dist 1-3, orange = 4-7, rouge = 8-10.</p>';
+            }
             html += '</div>';
 
             document.getElementById('postQ-content').innerHTML = html;
