@@ -1,4 +1,4 @@
-const CACHE_NAME = 'boulier-v3-8';
+const CACHE_NAME = 'boulier-v4-1';
 const urlsToCache = [
   '/Boulier/',
   '/Boulier/index.html'
