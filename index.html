@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V4.1</title>
+    <title>Boulier Prédictif V4.2</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap');
 
@@ -93,7 +93,7 @@
             padding: 0 1.5rem;
         }
 
-        /* ===== NAVIGATION V4.1 ===== */
+        /* ===== NAVIGATION V4.2 ===== */
         .nav { position: relative; }
 
         /* --- Groupes desktop --- */
@@ -503,7 +503,7 @@
     <div class="site-header">
         <div class="header-inner">
             <div class="header-tag">Outil prédictif · Boulier électrique</div>
-            <h1>🎲 Boulier Prédictif <span class="version">V4.1</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V4.2</span></h1>
         </div>
     </div>
 
@@ -592,11 +592,11 @@
                 <div class="stats-grid" id="home-stats"></div>
                 
                 <div class="alert alert-info">
-                    <div class="alert-title">🎨 V4.1 — Correction seuil alertes patterns (fausses alertes supprimées)</div>
+                    <div class="alert-title">🔧 V4.2 — Correction widget "Performances clés — retard en cours"</div>
                     <ul style="margin-top:8px;padding-left:20px;font-size:13px;">
-                        <li><strong>🆕 Navigation groupée desktop</strong> : onglets regroupés par thème (Analyse, Données, Outils) avec séparateurs visuels</li>
-                        <li><strong>🆕 Barre mobile iPhone</strong> : 4 pages principales en bas + bouton "Plus" avec panneau slide-up pour les pages secondaires</li>
-                        <li><strong>Aucun code métier modifié</strong> — seule la navigation a évolué</li>
+                        <li><strong>🐛 Fix : tirages Q exclus</strong> des évaluables — QA13, QP16, QA16… moteur différent, polluaient les retards des tirages standard du même max</li>
+                        <li><strong>🐛 Fix : résultats incomplets exclus</strong> — filtre passé de résultat.length ≥ 3 à ≥ 5 (tirages complets uniquement)</li>
+                        <li><strong>Impact</strong> : retards et alertes fiables, notamment pour max=16 (37% des évaluables étaient des Q) et max=14</li>
                     </ul>
                 </div>
                 
@@ -3286,7 +3286,7 @@
                 html += '</div>';
             }
             
-            // === V4.1 : WIDGET PATTERNS MARGINAUX (filtré par max, hors tirage courant) ===
+            // === V4.2 : WIDGET PATTERNS MARGINAUX (filtré par max, hors tirage courant) ===
             const currentMax = parsed && parsed.max ? parsed.max : null;
             const analysePatterns = analyserPatterns(tirages, currentMax, currentTirage.id);
             html += renderPatternsWidget(analysePatterns, currentMax);
@@ -3311,7 +3311,7 @@
         }
         
         // ═══════════════════════════════════════════════════════════════════
-        // V4.1 — INDICATEUR DE PATTERNS MARGINAUX (filtré par max)
+        // V4.2 — INDICATEUR DE PATTERNS MARGINAUX (filtré par max)
         // Analyse 4 patterns sur les tirages ayant prediction+resultat
         // filtrés sur le même max (tous codes confondus : A10, P10, H10…)
         // Le tirage courant (sans résultat) est exclu via excludeId.
@@ -3324,8 +3324,9 @@
             const evaluables = tirages.filter(t =>
                 t.id !== excludeId &&                          // exclure tirage courant
                 (!maxVal || (t.parsed && t.parsed.max === maxVal)) && // même max
+                !(t.code && t.code.startsWith('Q')) &&         // exclure tirages Q (moteur différent)
                 t.prediction && t.prediction.length >= 5 &&
-                t.resultat && t.resultat.length >= 3
+                t.resultat && t.resultat.length >= 5           // résultat complet requis (5 nombres)
             ).sort((a, b) => new Date(b.date) - new Date(a.date));
 
             if (evaluables.length < 3) return null;
@@ -5096,7 +5097,7 @@
       }
     </script>
     <footer style="background:var(--bleu);border-top:3px solid var(--or);color:rgba(255,255,255,.4);text-align:center;padding:1.8rem 2rem;font-size:.78rem;font-family:'Source Sans 3',sans-serif;">
-        <p style="color:var(--or);font-weight:700;margin-bottom:.3rem;">🎲 BOULIER PRÉDICTIF V4.1</p>
+        <p style="color:var(--or);font-weight:700;margin-bottom:.3rem;">🎲 BOULIER PRÉDICTIF V4.2</p>
         <p>Usage personnel · Données stockées localement · Aucune transmission externe</p>
     </footer>
 </body>
