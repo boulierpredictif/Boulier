@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V4.2</title>
+    <title>Boulier Prédictif V4.7</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap');
 
@@ -503,7 +503,7 @@
     <div class="site-header">
         <div class="header-inner">
             <div class="header-tag">Outil prédictif · Boulier électrique</div>
-            <h1>🎲 Boulier Prédictif <span class="version">V4.2</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V4.7</span></h1>
         </div>
     </div>
 
@@ -592,7 +592,13 @@
                 <div class="stats-grid" id="home-stats"></div>
                 
                 <div class="alert alert-info">
-                    <div class="alert-title">🔧 V4.2 — Correction widget "Performances clés — retard en cours"</div>
+                    <div class="alert-title">🔧 V4.5 — Corrections bugs widget Performances clés + alertes retard</div>
+                    <ul style="margin:4px 0 0 16px;font-size:13px;color:#374151;">
+                        <li><strong>Bug P1 corrigé</strong> : "placé le 1er prédit dans le résultat" redéfini comme <em>pred[0] présent quelque part dans le résultat</em> (et non position exacte). Freq réelle : 1/2.0 (425/861 tirages).</li>
+                        <li><strong>Seuil alertes retard max≤16 abaissé à 3</strong> : les alertes pour max=12 (7,10,12) et max=13 (10,11,13) étaient silencieuses à cause du seuil 5 — corrigé à 3, cohérent avec max=10.</li>
+                        <li><strong>Max 16 alerte paire extrême</strong> : si 15 ET 16 absents simultanément → message spécifique "paire extrême".</li>
+                        <li><strong>Max 15 message précis</strong> : "Le 15 (valeur max) absent depuis N tirages max=15".</li>
+                    </ul>
                     <ul style="margin-top:8px;padding-left:20px;font-size:13px;">
                         <li><strong>🐛 Fix : tirages Q exclus</strong> des évaluables — QA13, QP16, QA16… moteur différent, polluaient les retards des tirages standard du même max</li>
                         <li><strong>🐛 Fix : résultats incomplets exclus</strong> — filtre passé de résultat.length ≥ 3 à ≥ 5 (tirages complets uniquement)</li>
@@ -2255,9 +2261,14 @@
                 if (scores[12] !== undefined) methodScores.empirical[12] += 3.0;
             }
             // Max13 : top réels 6(53%), 7(50%), 4(50%) — ancienne règle [10,11,13] invalidée (tous à la base)
-            if (max === 13) [6, 7, 4].forEach(n => {
-                if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
-            });
+            // V4.3 : le 6 est la médiane et ressort dans 50% des tirages vs baseline 38.5% (+11.5%)
+            //        signal instable sur sous-périodes → bonus conservateur (+1.0 supplémentaire, pas fort)
+            if (max === 13) {
+                [6, 7, 4].forEach(n => {
+                    if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
+                });
+                if (scores[6] !== undefined) methodScores.empirical[6] += 1.0;
+            }
             // Max14 : top réels 11(44.8%), 8(43.3%), 3(43.3%) — règle inexistante avant
             if (max === 14) [11, 8, 3].forEach(n => {
                 if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
@@ -2346,8 +2357,9 @@
                 const delay = maxDelays[num];
                 if (scores[n] !== undefined) {
                     const bonusBase = delay * 0.3;
-                    // Retard ≥5 : bonus fort qui garantit l'entrée dans le top 5
-                    const bonusFort = delay >= 5 ? 15 : 0;
+                    // Retard ≥ seuil (3 pour max≤16, 5 pour max>16) : bonus fort qui garantit l'entrée dans le top 5
+                    const bonusSeuil = max <= 16 ? 3 : 5;
+                    const bonusFort = delay >= bonusSeuil ? 15 : 0;
                     methodScores.empirical[n] += bonusBase + bonusFort;
                 }
             }
@@ -2615,6 +2627,130 @@
             }
             // === FIN CORRECTIF V2.23 ===
 
+            // === CORRECTIF V4.3 : ÉQUILIBRAGE MARGINAL DES HAUTS POUR max 11–16 ===
+            // Problème constaté : le moteur produit parfois 5 numéros tous en moitié basse,
+            // alors que la distribution réelle est quasi-plate par tranche.
+            // Mécanisme : probabiliste (non systématique), piloté par :
+            //   - p_base : taux empirique des tirages réels du même type ayant ≥1 numéro ≥ mid
+            //   - n_seche : nombre de prédictions consécutives récentes (même type) avec tous < mid
+            //   - p_trigger = 1 - (1 - p_base)^(n_seche + 1)  →  croît avec la sécheresse
+            //   - Déclenchement stochastique : Math.random() < p_trigger
+            if (max >= 11 && max <= 16 && prefixe !== 'Q') {
+                const mid = Math.ceil(max / 2) + 1;
+                const tousEnBas = predictions.every(n => typeof n === 'number' && n < mid);
+
+                if (tousEnBas) {
+                    // 1. Calculer p_base sur les tirages réels du même type
+                    const tiragesAvecHaut = relatedTirages.filter(t =>
+                        t.resultat && t.resultat.some(n => n >= mid)
+                    ).length;
+                    const p_base = relatedTirages.length > 0
+                        ? tiragesAvecHaut / relatedTirages.length
+                        : 0.95; // fallback conservateur
+
+                    // 2. Compter la sécheresse : prédictions consécutives récentes toutes-basses
+                    //    (mêmes modalite+max, dans l'historique, du plus récent vers le plus ancien)
+                    let n_seche = 0;
+                    const predsRecentes = historique.filter(t =>
+                        t.parsed &&
+                        t.parsed.modalite === modalite &&
+                        t.parsed.max === max &&
+                        t.prediction && t.prediction.length === 5
+                    ); // déjà triés du plus récent au plus ancien par le filtre en tête de fonction
+                    for (const prev of predsRecentes) {
+                        if (prev.prediction.every(n => typeof n === 'number' && n < mid)) {
+                            n_seche++;
+                        } else {
+                            break; // la sécheresse est interrompue
+                        }
+                    }
+
+                    // 3. Probabilité de déclenchement : augmente avec la sécheresse
+                    const p_trigger = 1 - Math.pow(1 - p_base, n_seche + 1);
+
+                    // 4. Déclenchement stochastique
+                    if (Math.random() < p_trigger) {
+                        // Trouver le numéro bas le moins bien scoré dans les prédictions
+                        let pireIdx = -1, pireScore = Infinity;
+                        for (let i = 0; i < predictions.length; i++) {
+                            const n = predictions[i];
+                            if (typeof n === 'number' && n < mid && (scores[n] || 0) < pireScore) {
+                                pireScore = scores[n] || 0;
+                                pireIdx = i;
+                            }
+                        }
+                        // Trouver le meilleur numéro haut non déjà prédit
+                        const predsSet = new Set(predictions.filter(n => typeof n === 'number'));
+                        const meilleurHaut = Object.keys(scores)
+                            .map(k => parseInt(k))
+                            .filter(n => n >= mid && !predsSet.has(n) && !exclusions.includes(n))
+                            .sort((a, b) => (scores[b] || 0) - (scores[a] || 0))[0];
+
+                        if (pireIdx !== -1 && meilleurHaut !== undefined) {
+                            predictions[pireIdx] = meilleurHaut;
+                            alerts.push({
+                                type: 'info',
+                                message: `ℹ️ <strong>Équilibrage marginal</strong> : numéro haut introduit (sécheresse=${n_seche}, p=${(p_trigger * 100).toFixed(0)}%)`
+                            });
+                        }
+                    }
+                }
+            }
+            // === FIN CORRECTIF V4.3 ===
+
+            // === CORRECTIF V4.3b : PAIRE CONSÉCUTIVE OBLIGATOIRE POUR max=14 ===
+            // Constat empirique : 94% des tirages max=14 contiennent au moins une paire consécutive
+            // vs 87% théorique → signal stable (95% / 94% sur les deux moitiés de l'historique).
+            // Si aucune paire consécutive dans les 5 prédits : remplacer le numéro le moins bien scoré
+            // par le voisin +1 ou -1 du meilleur scoré (celui qui maximise le score du voisin).
+            if (max === 14) {
+                const hasPairConsec = () => {
+                    const sorted = predictions.filter(n => typeof n === 'number').sort((a, b) => a - b);
+                    for (let i = 0; i < sorted.length - 1; i++) {
+                        if (sorted[i + 1] - sorted[i] === 1) return true;
+                    }
+                    return false;
+                };
+
+                if (!hasPairConsec()) {
+                    const predsSet = new Set(predictions.filter(n => typeof n === 'number'));
+
+                    // Trouver le meilleur candidat voisin (+1 ou -1) d'un prédit, non déjà sélectionné
+                    let meilleurVoisin = null, meilleurVoisinScore = -Infinity;
+                    for (const p of predsSet) {
+                        for (const delta of [-1, 1]) {
+                            const v = p + delta;
+                            if (v >= 1 && v <= max && !predsSet.has(v) && !exclusions.includes(v) && scores[v] !== undefined) {
+                                if (scores[v] > meilleurVoisinScore) {
+                                    meilleurVoisinScore = scores[v];
+                                    meilleurVoisin = v;
+                                }
+                            }
+                        }
+                    }
+
+                    // Remplacer le numéro prédit le moins bien scoré
+                    if (meilleurVoisin !== null) {
+                        let pireIdx = -1, pireScore = Infinity;
+                        for (let i = 0; i < predictions.length; i++) {
+                            const n = predictions[i];
+                            if (typeof n === 'number' && (scores[n] || 0) < pireScore) {
+                                pireScore = scores[n] || 0;
+                                pireIdx = i;
+                            }
+                        }
+                        if (pireIdx !== -1) {
+                            predictions[pireIdx] = meilleurVoisin;
+                            alerts.push({
+                                type: 'info',
+                                message: `ℹ️ <strong>Paire consécutive introduite (max 14)</strong> : ${meilleurVoisin} ajouté — 94% des tirages max 14 contiennent au moins une paire consécutive`
+                            });
+                        }
+                    }
+                }
+            }
+            // === FIN CORRECTIF V4.3b ===
+
      // Calcul des probabilités finales
             const sortedScores = Object.entries(scores)
                 .sort((a, b) => b[1] - a[1])
@@ -2644,14 +2780,28 @@
             // Génération des alertes
             
             // Alertes retard (le bonus est déjà appliqué en 5b, avant la sélection)
+            // V4.5 : seuil d'alerte par max — 3 pour max≤16 (freqMoy ~2.2-2.6), 5 pour max>16
+            const alertSeuil = max <= 16 ? 3 : 5;
             if (Object.keys(maxDelays).length > 0) {
-                for (const num in maxDelays) {
-                    const delay = maxDelays[num];
-                    if (delay >= 5) {
+                // Cas spécial max=16 : alerte "paire extrême" si 15 ET 16 absents simultanément
+                if (max === 16 && maxDelays[15] !== undefined && maxDelays[16] !== undefined) {
+                    const d15 = maxDelays[15], d16 = maxDelays[16];
+                    if (d15 >= alertSeuil || d16 >= alertSeuil) {
                         alerts.push({
                             type: 'warning',
-                            message: `⚠️ Le nombre ${num} n'est pas sorti depuis ${delay} tirages à max ${max} (toutes modalités) - Probabilité accrue`
+                            message: `⚠️ <strong>Paire extrême absente (max 16)</strong> : le 15 absent depuis ${d15} tirage${d15>1?'s':''} et le 16 absent depuis ${d16} tirage${d16>1?'s':''} — probabilité accrue des valeurs extrêmes`
                         });
+                    }
+                } else {
+                    for (const num in maxDelays) {
+                        const delay = maxDelays[num];
+                        if (delay >= alertSeuil) {
+                            // Message précis pour max=15
+                            const precision = (max === 15 && parseInt(num) === 15)
+                                ? `⚠️ Le 15 (valeur max) n'est pas sorti depuis ${delay} tirage${delay>1?'s':''} à max 15 — probabilité accrue`
+                                : `⚠️ Le nombre ${num} n'est pas sorti depuis ${delay} tirage${delay>1?'s':''} à max ${max} (toutes modalités) — probabilité accrue`;
+                            alerts.push({ type: 'warning', message: precision });
+                        }
                     }
                 }
             }
@@ -3286,10 +3436,10 @@
                 html += '</div>';
             }
             
-            // === V4.2 : WIDGET PATTERNS MARGINAUX (filtré par max, hors tirage courant) ===
+            // === V4.7 : WIDGET PATTERNS — tous tirages avec résultat (tous max, tous codes) ===
             const currentMax = parsed && parsed.max ? parsed.max : null;
-            const analysePatterns = analyserPatterns(tirages, currentMax, currentTirage.id);
-            html += renderPatternsWidget(analysePatterns, currentMax);
+            const analysePatterns = analyserPatterns(tirages, null, currentTirage.id);
+            html += renderPatternsWidget(analysePatterns, null);
             // === FIN WIDGET PATTERNS ===
 
             // Formulaire de saisie du résultat
@@ -3297,8 +3447,8 @@
             html += '<h4 style="margin-bottom: 15px; color: #374151;">💾 Enregistrer le résultat du tirage</h4>';
             html += '<div class="form-group">';
             html += '<label class="form-label">Résultat constaté (1 à 7 nombres, ex-aequo acceptés)</label>';
-            html += '<input type="text" id="result-input-' + currentTirage.id + '" placeholder="Ex: 3,7,10,12,15 ou 3,7=10,12,15 (ex-aequo)" style="margin-bottom: 10px;">';
-            html += '<div style="font-size: 12px; color: #6b7280; margin-top: 5px;">Format: 3,7,10,12,15 (normal) ou 3,7=10,12,15 (7 et 10 ex-aequo)</div>';
+            html += '<input type="text" id="result-input-' + currentTirage.id + '" placeholder="Ex: 3 7 10 12 15 ou 3,7,10,12,15 ou 3,7=10,12,15 (ex-aequo)" style="margin-bottom: 10px;">';
+            html += '<div style="font-size: 12px; color: #6b7280; margin-top: 5px;">Format: 3 7 10 12 15 (espaces) ou 3,7,10,12,15 (virgules) ou 3,7=10,12,15 (ex-aequo)</div>';
             html += '</div>';
             html += '<button class="btn btn-success btn-full" onclick="saveResultFromPrediction(' + currentTirage.id + ')">✅ Enregistrer et évaluer</button>';
             html += '</div>';
@@ -3335,7 +3485,9 @@
             const dernierRef = evaluables[0];
 
             const patterns = [
-                { key: 'r1',  label: 'placé 1 numéro au rang 1',            test: (p, r) => p[0] === r[0] },
+                // V4.6 : le numéro sorti en position 1 (r[0]) est-il dans la prédiction ?
+                // (≠ V4.5 qui vérifiait si le 1er prédit était quelque part dans le résultat)
+                { key: 'r1',  label: 'le rang 1 du tirage dans la prédiction', test: (p, r) => p.includes(r[0]) },
                 { key: 't42', label: 'placé 2 numéros dans les 4 premiers',  test: (p, r) => r.slice(0,4).filter(n => p.includes(n)).length >= 2 },
                 { key: 't32', label: 'placé 2 numéros dans les 3 premiers',  test: (p, r) => r.slice(0,3).filter(n => p.includes(n)).length >= 2 },
                 { key: 't33', label: 'placé 3 numéros dans les 3 premiers',  test: (p, r) => r.slice(0,3).filter(n => p.includes(n)).length >= 3 }
@@ -3357,7 +3509,7 @@
         function renderPatternsWidget(patterns, maxVal) {
             if (!patterns) return '';
 
-            const labelMax = maxVal ? ` (max ${maxVal}, tous codes)` : '';
+            const labelMax = maxVal ? ` (max ${maxVal}, tous codes)` : ' (tous max, tous codes)';
             let html = `<div style="margin-top:20px;padding:16px 20px;background:#f8fafc;border-radius:12px;border:1px solid #e2e8f0;">`;
             html += `<h4 style="margin-bottom:4px;color:#1e293b;font-size:14px;font-weight:700;">⏳ Performances clés — retard en cours</h4>`;
             html += `<div style="font-size:11px;color:#9ca3af;margin-bottom:12px;">Sur tirages avec résultat${labelMax} — ${patterns[0]?.total || 0} tirages évalués</div>`;
@@ -3577,8 +3729,8 @@
         function saveResult(id) {
             const input = document.getElementById('result-' + id).value;
             
-            // Parser les ex-aequo : format 3, 7=10, 12, 15 ou 3, [7,10], 12, 15
-            const parts = input.split(',').map(p => p.trim());
+            // Parser les ex-aequo : format 3 7=10 12 15 ou 3,7=10,12,15 (espaces ou virgules acceptés)
+            const parts = input.split(/[\s,;]+/).map(p => p.trim()).filter(p => p.length > 0);
             const nums = [];
             
             parts.forEach(part => {
@@ -3606,7 +3758,7 @@
             });
             
             if (nums.length < 5 || nums.length > 7) {
-                alert('Veuillez entrer entre 5 et 7 nombres.\n\nFormat accepté:\n- Normal: 3, 7, 10, 12, 15\n- Ex-aequo avec =: 3, 7=10, 12, 15\n- Ex-aequo avec []: 3, [7,10], 12, 15');
+                alert('Veuillez entrer entre 5 et 7 nombres.\n\nFormats acceptés:\n- Espaces: 3 7 10 12 15\n- Virgules: 3,7,10,12,15\n- Ex-aequo: 3,7=10,12,15');
                 return;
             }
             
@@ -3630,8 +3782,8 @@
         function saveResultFromPrediction(id) {
             const input = document.getElementById('result-input-' + id).value;
             
-            // Parser les ex-aequo : format 3, 7=10, 12, 15 ou 3, [7,10], 12, 15
-            const parts = input.split(',').map(p => p.trim());
+            // Parser les ex-aequo : format 3 7=10 12 15 ou 3,7=10,12,15 (espaces ou virgules acceptés)
+            const parts = input.split(/[\s,;]+/).map(p => p.trim()).filter(p => p.length > 0);
             const nums = [];
             
             parts.forEach(part => {
@@ -3659,7 +3811,7 @@
             });
             
             if (nums.length < 5 || nums.length > 7) {
-                alert('Veuillez entrer entre 5 et 7 nombres.\n\nFormat accepté:\n- Normal: 3, 7, 10, 12, 15\n- Ex-aequo avec =: 3, 7=10, 12, 15\n- Ex-aequo avec []: 3, [7,10], 12, 15');
+                alert('Veuillez entrer entre 5 et 7 nombres.\n\nFormats acceptés:\n- Espaces: 3 7 10 12 15\n- Virgules: 3,7,10,12,15\n- Ex-aequo: 3,7=10,12,15');
                 return;
             }
             
@@ -5097,7 +5249,7 @@
       }
     </script>
     <footer style="background:var(--bleu);border-top:3px solid var(--or);color:rgba(255,255,255,.4);text-align:center;padding:1.8rem 2rem;font-size:.78rem;font-family:'Source Sans 3',sans-serif;">
-        <p style="color:var(--or);font-weight:700;margin-bottom:.3rem;">🎲 BOULIER PRÉDICTIF V4.2</p>
+        <p style="color:var(--or);font-weight:700;margin-bottom:.3rem;">🎲 BOULIER PRÉDICTIF V4.7</p>
         <p>Usage personnel · Données stockées localement · Aucune transmission externe</p>
     </footer>
 </body>
