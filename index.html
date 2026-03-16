@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V4.7</title>
+    <title>Boulier Prédictif V5.1</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap');
 
@@ -147,6 +147,27 @@
         }
         .nav-ia:hover { background: rgba(201,168,76,.2) !important; }
         .nav-ia.active { background: rgba(201,168,76,.18) !important; border-bottom-color: var(--or) !important; }
+
+        /* ── BANDEAU BILAN PARIS ── */
+        #bilan-header {
+            background: var(--bleu2);
+            border-bottom: 1px solid rgba(201,168,76,.2);
+            padding: .35rem 2.5rem;
+            font-size: .72rem;
+            font-family: 'Source Sans 3', sans-serif;
+            font-weight: 600;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: rgba(255,255,255,.5);
+            display: none;
+        }
+        #bilan-header.visible { display: flex; align-items: center; gap: 1rem; }
+        #bilan-header .bh-val { font-size: .85rem; font-weight: 700; }
+        #bilan-header .bh-ok  { color: #10b981; }
+        #bilan-header .bh-ko  { color: #ef4444; }
+        @media (max-width: 768px) {
+            #bilan-header { padding: .35rem 1rem; font-size: .68rem; }
+        }
 
         /* --- Barre mobile (cachée sur desktop) --- */
         .nav-mobile-bar { display: none; }
@@ -503,9 +524,11 @@
     <div class="site-header">
         <div class="header-inner">
             <div class="header-tag">Outil prédictif · Boulier électrique</div>
-            <h1>🎲 Boulier Prédictif <span class="version">V4.7</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V5.1</span></h1>
         </div>
     </div>
+
+    <div id="bilan-header"></div>
 
     <nav class="site-nav">
         <div class="nav-inner-wrap">
@@ -592,6 +615,20 @@
                 <div class="stats-grid" id="home-stats"></div>
                 
                 <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.1 — Bilan paris du jour</div>
+                    <ul style="margin: 5px 0 0 20px; font-size: 13px;">
+                        <li><strong>Coefficient misé</strong> : champ optionnel sur chaque tirage (page Prédiction et Historique)</li>
+                        <li><strong>Résultat du pari</strong> : Gagné / Perdu enregistré avec le tirage</li>
+                        <li><strong>Bilan journalier</strong> : affiché dans le tableau de bord — somme coefficients gagnants vs nombre de paris joués</li>
+                        <li><strong>Règle de rentabilité</strong> : ✅ si somme coefficients gagnants &gt; nombre total de paris du jour</li>
+                    </ul>
+                    <div class="alert-title">🔧 V4.8 — Prédiction Post-Q Affinée</div>
+                    <ul style="margin: 5px 0 0 20px; font-size: 13px;">
+                        <li><strong>Second bloc de prédiction</strong> : affiché dans la page Prédiction, strictement additif (la prédiction standard est inchangée)</li>
+                        <li><strong>Actif uniquement en zone Post-Q</strong> : placeholder grisé "Hors zone Post-Q" sinon</li>
+                        <li><strong>4 signaux modulants</strong> : fréquence historique à la distance exacte (+dist N), élasticité précoce/tardive par numéro, déjà-sorti session du jour, présence dans les 5 dernières sessions Q</li>
+                        <li><strong>Transparence</strong> : les signaux détectés et le contexte (tirages à cette distance, session du jour, sessions Q utilisées) sont affichés sous la prédiction affinée</li>
+                    </ul>
                     <div class="alert-title">🔧 V4.5 — Corrections bugs widget Performances clés + alertes retard</div>
                     <ul style="margin:4px 0 0 16px;font-size:13px;color:#374151;">
                         <li><strong>Bug P1 corrigé</strong> : "placé le 1er prédit dans le résultat" redéfini comme <em>pred[0] présent quelque part dans le résultat</em> (et non position exacte). Freq réelle : 1/2.0 (425/861 tirages).</li>
@@ -2118,7 +2155,7 @@
             // corrompt toutes les analyses temporelles : Q-veille, J-1/J-2, Post-Q, retards, etc.
             const predDateObj = parsed._predDate ? new Date(parsed._predDate) : new Date();
             historique = historique
-                .filter(t => new Date(t.date) < predDateObj)
+                .filter(t => new Date(t.date) < predDateObj && !t.annule)
                 .sort((a, b) => new Date(b.date) - new Date(a.date));
             const scores = {};
             const methodScores = {
@@ -2851,6 +2888,7 @@
                 var tq = tirages[qi];
                 if (!tq || !tq.code || !tq.code.startsWith('Q')) continue;
                 if (!tq.resultat || tq.resultat.length === 0) continue;
+                if (tq.annule) continue;
                 var tqDate = new Date(tq.date);
                 if (tqDate >= refDate) continue;
                 if (!lastQ || tqDate > new Date(lastQ.date)) lastQ = tq;
@@ -2864,6 +2902,7 @@
                 var tt = tirages[ti];
                 if (!tt || !tt.date) continue;
                 if (tt.code && tt.code.startsWith('Q')) continue;
+                if (tt.annule) continue;
                 var ttDate = new Date(tt.date);
                 if (ttDate > lastQDate && ttDate < refDate) nbEntre++;
             }
@@ -2928,6 +2967,7 @@
 
             tirages.forEach((tirage, index) => {
                 if (tirage.code && tirage.code.startsWith('Q')) return;
+                if (tirage.annule) return;
                 const postQInfo = isInPostQZone(index);
                 if (!postQInfo.inZone || !tirage.resultat) return;
                 if (cutoff && new Date(tirage.date) < cutoff) return;
@@ -3295,6 +3335,250 @@
             document.getElementById('postQ-content').innerHTML = html;
         }
         
+        // ═══════════════════════════════════════════════════════════════════
+        // V4.8 — PRÉDICTION POST-Q AFFINÉE
+        // Analyse contexte : élasticité par distance, session du jour, 5 dernières sessions Q
+        // Strictement additive : ne modifie pas la prédiction standard
+        // ═══════════════════════════════════════════════════════════════════
+
+        // Retourne les N derniers jours calendaires distincts ayant eu un Q avec résultat réel
+        function getDernieresSessionsQ(n) {
+            const joursVus = new Set();
+            const jours = [];
+            for (const t of tirages) {
+                if (!t.code || !t.code.startsWith('Q')) continue;
+                if (!t.resultat || t.resultat.length === 0) continue;
+                const jour = new Date(t.date).toISOString().slice(0, 10);
+                if (!joursVus.has(jour)) {
+                    joursVus.add(jour);
+                    jours.push(jour);
+                }
+            }
+            return jours.slice(0, n);
+        }
+
+        // Analyse le contexte Post-Q pour la distance donnée
+        function analysePostQContexte(distanceCourante) {
+            const stats = analysePostQStats(0, 10);
+            const aujourdHui = new Date().toISOString().slice(0, 10);
+            const cinqJoursQ = getDernieresSessionsQ(5);
+
+            // Fréquences historiques exactement à cette distance (P1-P3)
+            const histoADistance = {};
+            let totalADistance = 0;
+            tirages.forEach((tirage, index) => {
+                if (tirage.code && tirage.code.startsWith('Q')) return;
+                if (tirage.annule) return;
+                const info = isInPostQZone(index);
+                if (!info.inZone || info.distance !== distanceCourante) return;
+                if (!tirage.resultat || tirage.resultat.length === 0) return;
+                totalADistance++;
+                tirage.resultat.forEach((num, pos) => {
+                    if (pos >= 3) return;
+                    histoADistance[num] = (histoADistance[num] || 0) + 1;
+                });
+            });
+
+            // Session du jour : tirages Post-Q déjà réalisés avec résultat
+            const sessionJour = {};
+            let totalJour = 0;
+            tirages.forEach((tirage, index) => {
+                if (tirage.code && tirage.code.startsWith('Q')) return;
+                if (tirage.annule) return;
+                if (!tirage.resultat || tirage.resultat.length === 0) return;
+                const jourTirage = new Date(tirage.date).toISOString().slice(0, 10);
+                if (jourTirage !== aujourdHui) return;
+                const info = isInPostQZone(index);
+                if (!info.inZone) return;
+                totalJour++;
+                tirage.resultat.forEach((num, pos) => {
+                    if (pos >= 3) return;
+                    sessionJour[num] = (sessionJour[num] || 0) + 1;
+                });
+            });
+
+            // 5 dernières sessions Q : tous tirages Post-Q de ces journées
+            const cinqSessions = {};
+            const cinqSessionsParJour = {}; // num → Set de jours distincts où il est sorti
+            let totalCinq = 0;
+            tirages.forEach((tirage, index) => {
+                if (tirage.code && tirage.code.startsWith('Q')) return;
+                if (tirage.annule) return;
+                if (!tirage.resultat || tirage.resultat.length === 0) return;
+                const jourTirage = new Date(tirage.date).toISOString().slice(0, 10);
+                if (!cinqJoursQ.includes(jourTirage)) return;
+                const info = isInPostQZone(index);
+                if (!info.inZone) return;
+                totalCinq++;
+                tirage.resultat.forEach((num, pos) => {
+                    if (pos >= 3) return;
+                    cinqSessions[num] = (cinqSessions[num] || 0) + 1;
+                    if (!cinqSessionsParJour[num]) cinqSessionsParJour[num] = new Set();
+                    cinqSessionsParJour[num].add(jourTirage);
+                });
+            });
+
+            return {
+                histoADistance, totalADistance,
+                sessionJour, totalJour,
+                cinqSessions, cinqSessionsParJour, cinqJoursQ, totalCinq,
+                allDistrib: stats.allDistrib,
+                allCounts: stats.allCounts,
+                totalPostQ: stats.totalPostQ
+            };
+        }
+
+        // Calcule la prédiction Post-Q affinée — strictement additive, ne touche pas à la prédiction standard
+        function calculerPredictionPostQAffinee(prediction, parsed, postQInfo) {
+            const max = parsed.max || 10;
+            const distanceCourante = postQInfo.distance;
+            const ctx = analysePostQContexte(distanceCourante);
+            const notes = [];
+
+            // Recombiner les scores bruts des méthodes avec les poids actuels
+            const scores = {};
+            for (let n = 1; n <= max; n++) scores[n] = 0;
+            if (prediction.methodScores) {
+                for (const [method, methodData] of Object.entries(prediction.methodScores)) {
+                    const poids = methodWeights[method] || 0;
+                    for (const [numStr, score] of Object.entries(methodData)) {
+                        const num = parseInt(numStr);
+                        if (num >= 1 && num <= max) {
+                            scores[num] = (scores[num] || 0) + score * poids;
+                        }
+                    }
+                }
+            }
+
+            // 1. Bonus/malus fréquence historique à la distance exacte
+            if (ctx.totalADistance >= 5) {
+                for (let n = 1; n <= max; n++) {
+                    const cnt = ctx.histoADistance[n] || 0;
+                    const pct = cnt / ctx.totalADistance;
+                    if (pct >= 0.35) {
+                        scores[n] *= 1.60;
+                        notes.push('#' + n + ' → ' + Math.round(pct * 100) + '% en P1-P3 à dist +' + distanceCourante + ' (historique)');
+                    } else if (pct >= 0.20) {
+                        scores[n] *= 1.25;
+                    } else if (cnt === 0 && ctx.totalADistance >= 10) {
+                        scores[n] *= 0.75;
+                    }
+                }
+            }
+
+            // 2. Élasticité par profil de distance (précoce vs tardif)
+            for (let n = 1; n <= max; n++) {
+                const total = ctx.allCounts[n] || 0;
+                if (total < 3) continue;
+                const distrib = ctx.allDistrib[n] || {};
+                let precoce = 0, tardif = 0;
+                for (let d = 1; d <= 3; d++) precoce += (distrib[d] || 0);
+                for (let d = 7; d <= 10; d++) tardif += (distrib[d] || 0);
+                const pctPrecoce = precoce / total;
+                const pctTardif = tardif / total;
+
+                if (distanceCourante <= 2) {
+                    // On est tôt : favoriser les élastiques précoces, pénaliser les tardifs
+                    if (pctPrecoce >= 0.50) scores[n] *= 1.20;
+                    if (pctTardif >= 0.40) scores[n] *= 0.85;
+                } else if (distanceCourante >= 7) {
+                    // On est tard : favoriser les élastiques tardifs, pénaliser les précoces
+                    if (pctTardif >= 0.40) scores[n] *= 1.20;
+                    if (pctPrecoce >= 0.50) scores[n] *= 0.85;
+                }
+            }
+
+            // 3. Signal session du jour — déjà sorti 2+ fois dans la zone = léger malus
+            if (ctx.totalJour >= 2) {
+                for (const [numStr, cnt] of Object.entries(ctx.sessionJour)) {
+                    const num = parseInt(numStr);
+                    if (cnt >= 2 && scores[num] !== undefined) {
+                        scores[num] *= 0.85;
+                        notes.push('#' + num + ' déjà sorti ' + cnt + 'x dans la zone aujourd\'hui');
+                    }
+                }
+            }
+
+            // 4. Signal 5 dernières sessions Q — présent dans 3+ sessions distinctes = bonus
+            if (ctx.cinqJoursQ.length >= 3) {
+                for (let n = 1; n <= max; n++) {
+                    const nbJours = ctx.cinqSessionsParJour[n] ? ctx.cinqSessionsParJour[n].size : 0;
+                    if (nbJours >= 3) {
+                        scores[n] *= 1.25;
+                        notes.push('#' + n + ' présent dans ' + nbJours + '/' + ctx.cinqJoursQ.length + ' sessions Post-Q récentes');
+                    }
+                }
+            }
+
+            // Appliquer les exclusions
+            const exclusions = prediction.exclusions || [];
+            exclusions.forEach(n => { if (scores[n] !== undefined) scores[n] = 0; });
+
+            // Tri et top 5
+            const sorted = Object.entries(scores)
+                .map(([n, s]) => [parseInt(n), s])
+                .filter(([n, s]) => s > 0 && n >= 1 && n <= max)
+                .sort((a, b) => b[1] - a[1]);
+
+            const nombres = sorted.slice(0, 5).map(([n]) => n);
+
+            // Fallback si < 5 résultats
+            if (nombres.length < 5) {
+                const used = new Set(nombres);
+                for (const [n] of sorted) {
+                    if (nombres.length >= 5) break;
+                    if (!used.has(n)) { nombres.push(n); used.add(n); }
+                }
+            }
+
+            return { nombres, notes, ctx, distanceCourante };
+        }
+
+        // Rendu HTML du bloc prédiction Post-Q affinée
+        function renderPredictionPostQAffinee(affinee, postQInfo) {
+            let h = '<div class="card" style="margin-top:16px;background:linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%);border-top:4px solid #f59e0b;">';
+            h += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">';
+            h += '<h3 style="color:#92400e;margin:0;">⚡ Prédiction Post-Q Affinée</h3>';
+            h += '<span style="font-size:12px;background:#f59e0b;color:#fff;padding:2px 10px;border-radius:12px;font-weight:600;">' + postQInfo.qCode + ' +' + postQInfo.distance + '</span>';
+            h += '</div>';
+            h += '<p style="font-size:12px;color:#92400e;margin-bottom:14px;">Modulée par élasticité à dist +' + affinee.distanceCourante + ', session du jour et 5 dernières sessions Q.</p>';
+            h += '<div style="text-align:center;margin:14px 0;">';
+            affinee.nombres.forEach(n => {
+                h += '<span class="number" style="background:#d97706;color:white;width:50px;height:50px;line-height:50px;font-size:20px;margin:0 6px;">' + n + '</span>';
+            });
+            h += '</div>';
+            if (affinee.notes.length > 0) {
+                h += '<div style="margin-top:10px;padding:10px 14px;background:#fef3c7;border-radius:6px;">';
+                h += '<div style="font-size:11px;color:#92400e;font-weight:700;margin-bottom:5px;">📡 Signaux détectés :</div>';
+                affinee.notes.forEach(note => {
+                    h += '<div style="font-size:11px;color:#78350f;margin-top:2px;">• ' + note + '</div>';
+                });
+                h += '</div>';
+            }
+            const ctx = affinee.ctx;
+            h += '<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">';
+            h += '<div style="font-size:10px;color:#92400e;background:#fff;border-radius:6px;padding:4px 10px;">📊 Histo dist +' + affinee.distanceCourante + ' : ' + ctx.totalADistance + ' tirages</div>';
+            if (ctx.totalJour > 0) {
+                h += '<div style="font-size:10px;color:#92400e;background:#fff;border-radius:6px;padding:4px 10px;">📅 Session aujourd\'hui : ' + ctx.totalJour + ' Post-Q réalisés</div>';
+            }
+            if (ctx.cinqJoursQ.length > 0) {
+                h += '<div style="font-size:10px;color:#92400e;background:#fff;border-radius:6px;padding:4px 10px;">📆 Sessions Q utilisées : ' + ctx.cinqJoursQ.length + '/5 jours</div>';
+            }
+            h += '</div>';
+            h += '</div>';
+            return h;
+        }
+
+        // Rendu HTML du placeholder hors zone Post-Q
+        function renderPredictionPostQPlaceholder() {
+            return '<div class="card" style="margin-top:16px;background:#f9fafb;border:2px dashed #d1d5db;">' +
+                '<div style="text-align:center;padding:18px 20px;">' +
+                '<div style="font-size:22px;margin-bottom:6px;">⚫</div>' +
+                '<div style="font-size:13px;font-weight:600;color:#6b7280;">Hors zone Post-Q</div>' +
+                '<div style="font-size:11px;color:#9ca3af;margin-top:4px;">Analyse non active — disponible uniquement dans les 10 tirages non-Q suivant un Q</div>' +
+                '</div></div>';
+        }
+
         // Génération de prédiction
         function generatePrediction() {
             // Nettoyer l'affichage précédent
@@ -3396,6 +3680,20 @@
             });
             html += '</div>';
             html += '</div>';
+
+            // === V4.8 : BLOC PRÉDICTION POST-Q AFFINÉE (strictement additif) ===
+            {
+                const postQInfoPred = (parsed.prefixe !== 'Q')
+                    ? isInPostQZone(new Date(date).toISOString())
+                    : { inZone: false };
+                if (postQInfoPred.inZone) {
+                    const affinee = calculerPredictionPostQAffinee(prediction, parsed, postQInfoPred);
+                    html += renderPredictionPostQAffinee(affinee, postQInfoPred);
+                } else {
+                    html += renderPredictionPostQPlaceholder();
+                }
+            }
+            // === FIN BLOC POST-Q AFFINÉE ===
             
             // Détails des méthodes
             if (prediction.methodScores) {
@@ -3450,6 +3748,24 @@
             html += '<input type="text" id="result-input-' + currentTirage.id + '" placeholder="Ex: 3 7 10 12 15 ou 3,7,10,12,15 ou 3,7=10,12,15 (ex-aequo)" style="margin-bottom: 10px;">';
             html += '<div style="font-size: 12px; color: #6b7280; margin-top: 5px;">Format: 3 7 10 12 15 (espaces) ou 3,7,10,12,15 (virgules) ou 3,7=10,12,15 (ex-aequo)</div>';
             html += '</div>';
+            html += '<div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-end;">';
+            html += '<div style="flex:1;">';
+            html += '<label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px;">🎯 Numéros joués</label>';
+            html += '<input type="number" id="nb-input-' + currentTirage.id + '" placeholder="1–5" step="1" min="1" max="5" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;">';
+            html += '</div>';
+            html += '<div style="flex:1.4;">';
+            html += '<label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px;">💰 Coeff gagnant</label>';
+            html += '<input type="number" id="coeff-input-' + currentTirage.id + '" placeholder="Ex: 6.2" step="0.1" min="1" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;">';
+            html += '</div>';
+            html += '<div style="flex:1.2;">';
+            html += '<label style="font-size:12px;color:#6b7280;display:block;margin-bottom:4px;">Résultat</label>';
+            html += '<select id="pari-input-' + currentTirage.id + '" style="width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;">';
+            html += '<option value="">—</option>';
+            html += '<option value="1">✅ Gagné</option>';
+            html += '<option value="0">❌ Perdu</option>';
+            html += '</select>';
+            html += '</div>';
+            html += '</div>';
             html += '<button class="btn btn-success btn-full" onclick="saveResultFromPrediction(' + currentTirage.id + ')">✅ Enregistrer et évaluer</button>';
             html += '</div>';
             
@@ -3475,6 +3791,7 @@
                 t.id !== excludeId &&                          // exclure tirage courant
                 (!maxVal || (t.parsed && t.parsed.max === maxVal)) && // même max
                 !(t.code && t.code.startsWith('Q')) &&         // exclure tirages Q (moteur différent)
+                !t.annule &&                                   // exclure tirages annulés
                 t.prediction && t.prediction.length >= 5 &&
                 t.resultat && t.resultat.length >= 5           // résultat complet requis (5 nombres)
             ).sort((a, b) => new Date(b.date) - new Date(a.date));
@@ -3657,6 +3974,26 @@
                                    (t.parsed && t.parsed.modalite === 'C') ? 'badge-c' : 
                                    'badge-std';
                 
+                // V4.9 : carte annulée
+                if (t.annule) {
+                    html += '<div class="card" style="background:#f9fafb;border-left:4px solid #d1d5db;opacity:0.75;">';
+                    html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+                    html += '<div>';
+                    html += '<span class="badge ' + badgeClass + '" style="opacity:0.5;">' + t.code + '</span>';
+                    html += ' <span style="font-size:14px;color:#9ca3af;margin-left:8px;">' + formatDate(t.date) + '</span>';
+                    html += ' <span style="display:inline-block;background:#6b7280;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:8px;">🚫 ANNULÉ</span>';
+                    html += '</div>';
+                    html += '<div style="display:flex;gap:8px;">';
+                    html += '<button class="btn-icon" style="color:#10b981;border-color:#10b981;" onclick="reactiverTirage(' + t.id + ')">↩️ Réactiver</button>';
+                    html += '<button class="btn-icon btn-delete" onclick="deleteTirage(' + t.id + ')">🗑️ Supprimer</button>';
+                    html += '</div></div>';
+                    if (t.prediction && t.prediction.length > 0) {
+                        html += '<div style="margin-top:8px;font-size:12px;color:#9ca3af;"><strong>Prédiction conservée :</strong> ' + t.prediction.join(', ') + '</div>';
+                    }
+                    html += '</div>';
+                    return;
+                }
+
                 // Style spécial si en zone Post-Q
                 const cardStyle = postQInfo.inZone 
                     ? 'background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-left: 4px solid #f59e0b;'
@@ -3677,6 +4014,14 @@
                 if (t.score) {
                     const scoreColor = t.score >= 4 ? '#10b981' : t.score >= 2 ? '#f59e0b' : '#ef4444';
                     html += '<div style="font-weight: 700; color: ' + scoreColor + ';">' + t.score.toFixed(1) + '/5';
+                    if (t.coeff !== undefined) {
+                        const nb  = t.nbJoues || 1;
+                        const net = t.pariGagne ? (t.coeff - nb) : -nb;
+                        const pc  = net >= 0 ? '#10b981' : '#ef4444';
+                        const ps  = t.pariGagne === true ? '✅' : t.pariGagne === false ? '❌' : '—';
+                        html += ' <span style="font-size:12px;color:' + pc + ';margin-left:8px;">' + ps + ' net ' + (net >= 0 ? '+' : '') + net.toFixed(1) + ' (' + nb + ' joué' + (nb > 1 ? 's' : '') + ')</span>';
+                    }
+                    html += '</div>';
                     if (t.predictionDetails && t.predictionDetails.confidence) {
                         html += ' <span class="confidence-indicator confidence-' + t.predictionDetails.confidence + '" style="margin-left: 8px; font-size: 11px;">' +
                             (t.predictionDetails.confidence === 'high' ? 'Haute' : t.predictionDetails.confidence === 'medium' ? 'Moyenne' : 'Faible') +
@@ -3713,11 +4058,21 @@
                 } else {
                     html += '<div style="margin-top: 15px;">';
                     html += '<input type="text" id="result-' + t.id + '" placeholder="Ex: 3,7,10,12,15 ou 3,7=10,12,15 (ex-aequo)" style="margin-bottom: 10px;">';
+                    html += '<div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-end;">';
+                    html += '<div style="flex:1;"><label style="font-size:11px;color:#6b7280;display:block;margin-bottom:3px;">🎯 Nb joués</label>';
+                    html += '<input type="number" id="nb-' + t.id + '" placeholder="1–5" step="1" min="1" max="5" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"></div>';
+                    html += '<div style="flex:1.4;"><label style="font-size:11px;color:#6b7280;display:block;margin-bottom:3px;">💰 Coeff gagnant</label>';
+                    html += '<input type="number" id="coeff-' + t.id + '" placeholder="Ex: 6.2" step="0.1" min="1" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;"></div>';
+                    html += '<div style="flex:1.2;"><label style="font-size:11px;color:#6b7280;display:block;margin-bottom:3px;">Résultat</label>';
+                    html += '<select id="pari-' + t.id + '" style="width:100%;padding:6px;border:1px solid #d1d5db;border-radius:6px;font-size:13px;">';
+                    html += '<option value="">—</option><option value="1">✅ Gagné</option><option value="0">❌ Perdu</option></select></div>';
+                    html += '</div>';
                     html += '<button class="btn btn-success btn-full" onclick="saveResult(' + t.id + ')">💾 Enregistrer le résultat</button>';
                     html += '</div>';
                 }
                 
                 html += '<div class="card-actions">';
+                html += '<button class="btn-icon" style="color:#f59e0b;border-color:#f59e0b;" onclick="annulerTirage(' + t.id + ')">🚫 Annuler</button>';
                 html += '<button class="btn-icon btn-delete" onclick="deleteTirage(' + t.id + ')">🗑️ Supprimer</button>';
                 html += '</div>';
                 html += '</div>';
@@ -3773,6 +4128,13 @@
                     // Mise à jour des poids des méthodes (apprentissage adaptatif renforcé)
                     updateMethodWeights(tirage, true);
                 }
+                // Bilan paris — capturer coefficient et résultat pari (optionnel)
+                const coeffEl = document.getElementById('coeff-' + id);
+                const pariEl  = document.getElementById('pari-' + id);
+                const nbEl    = document.getElementById('nb-' + id);
+                if (nbEl    && nbEl.value)    tirage.nbJoues  = parseInt(nbEl.value);
+                if (coeffEl && coeffEl.value) tirage.coeff    = parseFloat(coeffEl.value);
+                if (pariEl  && pariEl.value !== '') tirage.pariGagne = pariEl.value === '1';
                 saveToStorage();
                 loadHistory();
                 updateHome();
@@ -3826,6 +4188,13 @@
                     // Mise à jour des poids des méthodes (apprentissage adaptatif renforcé)
                     updateMethodWeights(tirage, true);
                 }
+                // Bilan paris — capturer coefficient et résultat pari (optionnel)
+                const coeffEl = document.getElementById('coeff-input-' + id);
+                const pariEl  = document.getElementById('pari-input-' + id);
+                const nbEl    = document.getElementById('nb-input-' + id);
+                if (nbEl    && nbEl.value)    tirage.nbJoues  = parseInt(nbEl.value);
+                if (coeffEl && coeffEl.value) tirage.coeff    = parseFloat(coeffEl.value);
+                if (pariEl  && pariEl.value !== '') tirage.pariGagne = pariEl.value === '1';
                 saveToStorage();
                 updateHome();
                 
@@ -3845,6 +4214,18 @@
                     }
                 }
                 html += '</div>';
+                // Bilan du jour en bas du bloc résultat
+                const bilan = getBilanParisDuJour();
+                if (bilan) {
+                    const bc  = bilan.rentable ? '#10b981' : '#ef4444';
+                    const bs  = bilan.rentable ? '✅' : '❌';
+                    const net = (bilan.netTotal >= 0 ? '+' : '') + bilan.netTotal.toFixed(1);
+                    html += '<div style="margin-top:14px;padding:10px 14px;background:rgba(0,0,0,.04);border-radius:6px;font-size:13px;">';
+                    html += '<span style="color:#6b7280;font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:.05em;">Bilan du jour</span><br>';
+                    html += '<span style="font-size:18px;font-weight:700;color:' + bc + ';">' + bs + ' Net ' + net + ' pts</span>';
+                    html += '<span style="color:#6b7280;font-size:12px;margin-left:8px;">' + bilan.gagnes + ' gagné' + (bilan.gagnes > 1 ? 's' : '') + ' / ' + bilan.total + ' pari' + (bilan.total > 1 ? 's' : '') + '</span>';
+                    html += '</div>';
+                }
                 html += '<button class="btn btn-primary btn-full" style="margin-top: 15px;" onclick="showPage(\'prediction\'); document.getElementById(\'prediction-result\').innerHTML = \'\';">🎯 Nouvelle prédiction</button>';
                 html += '<button class="btn btn-secondary btn-full" style="margin-top: 10px;" onclick="showPage(\'history\')">📚 Voir l\'historique</button>';
                 html += '</div>';
@@ -3925,6 +4306,31 @@
                 updateHome();
             }
         }
+
+        // V4.9 — Annuler un tirage (marque comme annulé, exclu de tous les calculs)
+        function annulerTirage(id) {
+            const t = tirages.find(t => t.id === id);
+            if (!t) return;
+            const label = t.code + ' du ' + formatDate(t.date);
+            if (!confirm('Marquer "' + label + '" comme annulé ?\n\nCe tirage sera conservé dans l\'historique mais exclu de tous les calculs (fréquences, retards, Post-Q, scores).')) return;
+            t.annule = true;
+            t.resultat = [];
+            t.score = 0;
+            saveToStorage();
+            loadHistory();
+            updateHome();
+        }
+
+        // V4.9 — Réactiver un tirage annulé (retour à l'état sans résultat)
+        function reactiverTirage(id) {
+            const t = tirages.find(t => t.id === id);
+            if (!t) return;
+            if (!confirm('Réactiver ce tirage annulé ?\n\nIl redeviendra actif (sans résultat enregistré) et sera à nouveau inclus dans tous les calculs.')) return;
+            delete t.annule;
+            saveToStorage();
+            loadHistory();
+            updateHome();
+        }
         
         // Statistiques
         function loadStats() {
@@ -3934,11 +4340,11 @@
             // Sauvegarder la valeur actuelle du filtre max
             const currentMaxValue = maxFilter;
             
-            let filtered = tirages;
-            if (typeFilter === 'Q') filtered = tirages.filter(t => t.code.startsWith('Q'));
-            else if (typeFilter === 'PV') filtered = tirages.filter(t => t.code.startsWith('PV'));
-            else if (typeFilter === 'C') filtered = tirages.filter(t => t.parsed && t.parsed.modalite === 'C');
-            else if (typeFilter === 'standard') filtered = tirages.filter(t => !t.code.startsWith('Q') && !t.code.startsWith('PV'));
+            let filtered = tirages.filter(t => !t.annule);
+            if (typeFilter === 'Q') filtered = filtered.filter(t => t.code.startsWith('Q'));
+            else if (typeFilter === 'PV') filtered = filtered.filter(t => t.code.startsWith('PV'));
+            else if (typeFilter === 'C') filtered = filtered.filter(t => t.parsed && t.parsed.modalite === 'C');
+            else if (typeFilter === 'standard') filtered = filtered.filter(t => !t.code.startsWith('Q') && !t.code.startsWith('PV'));
             
             if (maxFilter !== 'all') {
                 filtered = filtered.filter(t => t.parsed && t.parsed.max === parseInt(maxFilter));
@@ -4025,7 +4431,7 @@
         
         // Stats Q
         function updateStatsQ() {
-            const qTirages = tirages.filter(t => t.code && t.code.startsWith('Q') && t.resultat && t.resultat.length > 0);
+            const qTirages = tirages.filter(t => t.code && t.code.startsWith('Q') && !t.annule && t.resultat && t.resultat.length > 0);
             
             let html = '<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">';
             html += '<div style="background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); padding: 25px; border-radius: 12px; text-align: center;">';
@@ -4067,7 +4473,7 @@
         
         // Top 3 Analysis
         function updateTop3() {
-            const withResults = tirages.filter(t => t.prediction && t.prediction.length > 0 && t.resultat && t.resultat.length >= 3);
+            const withResults = tirages.filter(t => t.prediction && t.prediction.length > 0 && !t.annule && t.resultat && t.resultat.length >= 3);
             
             let html = '';
             
@@ -4997,7 +5403,7 @@
             let text = '#WEIGHTS: ' + Object.entries(methodWeights)
                 .map(([k, v]) => k + '=' + v.toFixed(6))
                 .join(',') + '\n';
-            text += '#VERSION: 2.19\n';
+            text += '#VERSION: 5.1\n';
             text += '\n';
             
             sorted.forEach(t => {
@@ -5042,6 +5448,17 @@
                 if (t.score) {
                     text += 'Score: ' + t.score.toFixed(2) + '/5\n';
                 }
+                if (t.coeff !== undefined) {
+                    text += 'Coefficient: ' + t.coeff.toFixed(1) + '\n';
+                }
+                if (t.nbJoues !== undefined) {
+                    text += 'Numéros joués: ' + t.nbJoues + '\n';
+                }
+                if (t.pariGagne !== undefined) {
+                    const nb  = t.nbJoues || 1;
+                    const net = t.pariGagne ? (t.coeff - nb) : -nb;
+                    text += 'Pari: ' + (t.pariGagne ? 'Gagné' : 'Perdu') + ' | Net: ' + (net >= 0 ? '+' : '') + net.toFixed(1) + '\n';
+                }
                 text += '\n';
             });
             
@@ -5049,14 +5466,18 @@
         }
         
         function exportCSV() {
-            let csv = 'Date,Code,Prédiction,Résultat,Score\n';
-            
+            let csv = 'Date,Code,Prédiction,Résultat,Score,NbJoués,Coefficient,Pari,Net\n';
             tirages.forEach(t => {
-                const pred = t.prediction ? t.prediction.join('-') : '';
-                const res = t.resultat ? t.resultat.join('-') : '';
-                csv += formatDate(t.date) + ',' + t.code + ',"' + pred + '","' + res + '",' + (t.score || 0) + '\n';
+                const pred  = t.prediction ? t.prediction.join('-') : '';
+                const res   = t.resultat   ? t.resultat.join('-')   : '';
+                const nb    = t.nbJoues    !== undefined ? t.nbJoues : '';
+                const coeff = t.coeff      !== undefined ? t.coeff.toFixed(1) : '';
+                const pari  = t.pariGagne  === true  ? 'Gagné'
+                            : t.pariGagne  === false ? 'Perdu' : '';
+                const net   = (t.pariGagne !== undefined && t.nbJoues !== undefined)
+                            ? (t.pariGagne ? (t.coeff - t.nbJoues) : -t.nbJoues).toFixed(1) : '';
+                csv += formatDate(t.date) + ',' + t.code + ',"' + pred + '","' + res + '",' + (t.score || 0) + ',' + nb + ',' + coeff + ',' + pari + ',' + net + '\n';
             });
-            
             downloadFile('boulier-tirages.csv', csv, 'text/csv');
         }
         
@@ -5067,7 +5488,7 @@
                 nGrams,
                 methodWeights,
                 exportDate: new Date().toISOString(),
-                version: '3.0'
+                version: '5.1'
             }, null, 2);
             
             downloadFile('boulier-sauvegarde.json', data, 'application/json');
@@ -5201,11 +5622,50 @@
             setTimeout(function(){ c.style.display = 'none'; }, 3000);
         }
         // Accueil
+        function updateBilanHeader() {
+            const bilan = getBilanParisDuJour();
+            const el = document.getElementById('bilan-header');
+            if (!el) return;
+            if (!bilan) { el.className = ''; el.innerHTML = ''; return; }
+            const cls   = bilan.rentable ? 'bh-ok' : 'bh-ko';
+            const signe = bilan.rentable ? '✅' : '❌';
+            const net   = (bilan.netTotal >= 0 ? '+' : '') + bilan.netTotal.toFixed(1);
+            el.className = 'visible';
+            el.innerHTML =
+                '<span>Bilan du jour</span>' +
+                '<span class="bh-val ' + cls + '">' + signe + ' Net ' + net + ' pts</span>' +
+                '<span style="color:rgba(255,255,255,.35);">' + bilan.gagnes + ' gagné' + (bilan.gagnes > 1 ? 's' : '') + ' / ' + bilan.total + ' paris</span>';
+        }
+
+        function getBilanParisDuJour() {
+            const today = new Date().toDateString();
+            const parisJour = tirages.filter(t =>
+                !t.annule &&
+                t.nbJoues !== undefined &&
+                t.pariGagne !== undefined &&
+                new Date(t.date).toDateString() === today
+            );
+            if (parisJour.length === 0) return null;
+            const gagnes = parisJour.filter(t => t.pariGagne);
+            const netTotal = parisJour.reduce((s, t) => {
+                const nb  = t.nbJoues || 1;
+                const net = t.pariGagne ? ((t.coeff || 0) - nb) : -nb;
+                return s + net;
+            }, 0);
+            return {
+                total:    parisJour.length,
+                gagnes:   gagnes.length,
+                netTotal,
+                rentable: netTotal > 0
+            };
+        }
+
         function updateHome() {
-            const total = tirages.length;
-            const avecScore = tirages.filter(t => t.score > 0).length;
+            const actifs = tirages.filter(t => !t.annule);
+            const total = actifs.length;
+            const avecScore = actifs.filter(t => t.score > 0).length;
             const scoreMoyen = avecScore > 0
-                ? (tirages.filter(t => t.score > 0).reduce((sum, t) => sum + t.score, 0) / avecScore).toFixed(2)
+                ? (actifs.filter(t => t.score > 0).reduce((sum, t) => sum + t.score, 0) / avecScore).toFixed(2)
                 : '0.00';
             
             let html = '<div class="stat-card">';
@@ -5222,8 +5682,22 @@
             html += '<div class="stat-value">' + avecScore + '</div>';
             html += '<div class="stat-label">Tirages évalués</div>';
             html += '</div>';
+
+            // Bilan paris du jour
+            const bilan = getBilanParisDuJour();
+            if (bilan) {
+                const couleur = bilan.rentable ? '#10b981' : '#ef4444';
+                const signe   = bilan.rentable ? '✅' : '❌';
+                const net     = (bilan.netTotal >= 0 ? '+' : '') + bilan.netTotal.toFixed(1);
+                html += '<div class="stat-card" style="border-top: 3px solid ' + couleur + ';">';
+                html += '<div class="stat-value" style="color:' + couleur + '; font-size: 1.1rem;">' + signe + ' Net ' + net + ' pts</div>';
+                html += '<div class="stat-label">Bilan paris du jour</div>';
+                html += '<div style="font-size:11px;color:#6b7280;margin-top:2px;">' + bilan.gagnes + ' gagné(s) sur ' + bilan.total + ' pari(s)</div>';
+                html += '</div>';
+            }
             
             document.getElementById('home-stats').innerHTML = html;
+            updateBilanHeader();
         }
         
         function formatDate(isoDate) {
