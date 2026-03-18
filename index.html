@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V5.1</title>
+    <title>Boulier Prédictif V5.2</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap');
 
@@ -524,7 +524,7 @@
     <div class="site-header">
         <div class="header-inner">
             <div class="header-tag">Outil prédictif · Boulier électrique</div>
-            <h1>🎲 Boulier Prédictif <span class="version">V5.1</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V5.2</span></h1>
         </div>
     </div>
 
@@ -615,6 +615,10 @@
                 <div class="stats-grid" id="home-stats"></div>
                 
                 <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.2 — Fix bug "2 derniers → 3 premiers"</div>
+                    <div>Correction : la règle utilisait un filtre par max (ex. P12 au lieu du tirage immédiatement précédent). Désormais la référence est le tirage consécutif brut tous types confondus, conformément à la logique empirique originale. Le calcul du retard (patternMisses) est également corrigé en conséquence.</div>
+                </div>
+                <div class="alert alert-info" style="margin-bottom:8px;">
                     <div class="alert-title">🔧 V5.1 — Bilan paris du jour</div>
                     <ul style="margin: 5px 0 0 20px; font-size: 13px;">
                         <li><strong>Coefficient misé</strong> : champ optionnel sur chaque tirage (page Prédiction et Historique)</li>
@@ -1690,8 +1694,6 @@
             // ⚠️ RÈGLE VALABLE UNIQUEMENT pour les 5-6 premiers tirages du jour calendaire
             // En dehors de ce créneau : règle désactivée complètement
 
-            const { modalite, max } = parsed;
-
             // Déterminer le jour calendaire du tirage à prédire
             const predDay = predictionDate
                 ? new Date(predictionDate).toISOString().slice(0, 10)
@@ -1718,23 +1720,25 @@
             );
             if (qApres) return null;
 
-            // V3.5 FIX : règle empirique sur le max uniquement — tous préfixes confondus
-            const relatedTirages = historique.filter(t =>
-                t.parsed && t.parsed.max === max &&
+            // V5.2 FIX : la règle "2 derniers → 3 premiers" est une règle de séquence
+            // BRUTE entre tirages consécutifs, tous types confondus.
+            // Aucun filtre par max ou modalité — on prend simplement les tirages
+            // avec résultat dans l'ordre chronologique inverse.
+            const allWithResults = historique.filter(t =>
                 t.resultat && t.resultat.length === 5
             ).slice(0, 20);
 
-            if (relatedTirages.length === 0) return null;
+            if (allWithResults.length === 0) return null;
 
-            // Les deux derniers numéros du tirage précédent du même type
-            const lastTirage = relatedTirages[0];
+            // Le tirage immédiatement précédent, quel que soit son type
+            const lastTirage = allWithResults[0];
             const twoLastNumbers = [lastTirage.resultat[3], lastTirage.resultat[4]];
 
-            // Mesurer le retard du pattern sur l'historique
+            // Mesurer le retard du pattern sur des paires consécutives tous types confondus
             let patternMisses = 0;
-            for (let i = 0; i < relatedTirages.length - 1; i++) {
-                const current = relatedTirages[i];
-                const next = relatedTirages[i + 1];
+            for (let i = 0; i < allWithResults.length - 1; i++) {
+                const current = allWithResults[i];
+                const next = allWithResults[i + 1];
                 if (current.resultat.length !== 5 || next.resultat.length !== 5) continue;
                 const twoLast = [current.resultat[3], current.resultat[4]];
                 const threeFirst = next.resultat.slice(0, 3);
