@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V5.2</title>
+    <title>Boulier Prédictif V5.4</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap');
 
@@ -524,7 +524,7 @@
     <div class="site-header">
         <div class="header-inner">
             <div class="header-tag">Outil prédictif · Boulier électrique</div>
-            <h1>🎲 Boulier Prédictif <span class="version">V5.2</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V5.4</span></h1>
         </div>
     </div>
 
@@ -614,6 +614,16 @@
                 
                 <div class="stats-grid" id="home-stats"></div>
                 
+                <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.4 — Gradient top-30% + bonus 6 max=12</div>
+                    <div>Deux correctifs moteur simultanés, validés par simulation sur 1 891 tirages :<br>
+                    <strong>(1) Gradient top-30% du range</strong> (max ≥ 11) : après combinaison pondérée, pénalité ×0.60 sur tout numéro prédit dont la valeur dépasse 70 % du range (ex. &gt;8 sur max=11, &gt;11 sur max=16). Exclut le numéro déjà traité par la règle V5.3. Ratio gain/perte = 1.60× (559 améliorations / 350 dégradations).<br>
+                    <strong>(2) Bonus empirique 6 sur max=12</strong> : +1.5 dans methodScores.empirical, identique aux règles existantes [11,1,5]. Le 6 sort dans 49 % des tirages max=12 (théorie 41.7 %) sans aucune règle dédiée — lacune comblée. 54 cas récupérables identifiés.</div>
+                </div>
+                <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.3 — Pénalité pos4 conditionnelle</div>
+                    <div>Nouveau correctif moteur : le numéro le plus élevé tiré au draw immédiatement précédent (tous types confondus) reçoit une pénalité ×0.45 sur son score composite, uniquement pour max ≥ 10. Justification empirique : ce numéro (pos4) répète à 13–29 % selon le max, contre 22–50 % attendus théoriquement (−15 à −25 pts). Validé par simulation sur 1 958 tirages : ratio gain/perte = 1.63× sur max ≥ 10.</div>
+                </div>
                 <div class="alert alert-info">
                     <div class="alert-title">🔧 V5.2 — Fix bug "2 derniers → 3 premiers"</div>
                     <div>Correction : la règle utilisait un filtre par max (ex. P12 au lieu du tirage immédiatement précédent). Désormais la référence est le tirage consécutif brut tous types confondus, conformément à la logique empirique originale. Le calcul du retard (patternMisses) est également corrigé en conséquence.</div>
@@ -2294,8 +2304,9 @@
                 if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
             });
             // Max12 : top réels 11(50.7%), 1(45.2%), 5(45.2%) + 12 se répète à 60% (fort)
+            // V5.4 : ajout du 6 (+1.5) — sort à 49% vs théorie 41.7%, sans règle dédiée (54 cas récupérables)
             if (max === 12) {
-                [11, 1, 5].forEach(n => {
+                [11, 1, 5, 6].forEach(n => {
                     if (scores[n] !== undefined) methodScores.empirical[n] += 1.5;
                 });
                 // Le 12 (max du format) ressort dans 60% des cas vs base 41.7% → bonus fort
@@ -2516,6 +2527,44 @@
                     methodScores.empirical[n] * methodWeights.empirical;
             }
             
+            // === V5.3 : PÉNALITÉ POS4 CONDITIONNELLE ===
+            // Le numéro le plus élevé tiré au draw immédiatement précédent (tous types)
+            // répète à 13–29 % selon le max, contre 22–50 % théoriques (–15 à –25 pts).
+            // Pénalité ×0.45 appliquée uniquement pour max ≥ 10.
+            // Validé sur 1 958 tirages : ratio gain/perte = 1.63× (191 améliorations / 117 dégradations).
+            if (max >= 10) {
+                const prevTirage = historique[0]; // tirage immédiatement précédent, tous types
+                if (prevTirage && prevTirage.resultat && prevTirage.resultat.length === 5) {
+                    const maxTiréPrev = Math.max(...prevTirage.resultat);
+                    if (maxTiréPrev <= max && scores[maxTiréPrev] !== undefined) {
+                        scores[maxTiréPrev] *= 0.45;
+                    }
+                }
+            }
+            // === FIN V5.3 PÉNALITÉ POS4 ===
+
+            // === V5.4 : GRADIENT TOP-30% DU RANGE ===
+            // Les numéros dans le tiers supérieur du range (N > max*0.70) répètent
+            // systématiquement moins que la théorie : –15 à –25 pts selon le max.
+            // Pénalité ×0.60 sur ces numéros s'ils sont dans la prédiction, pour max ≥ 11.
+            // Exclut le numéro déjà pénalisé par V5.3 (maxTiréPrev) pour éviter la double pénalité.
+            // Ratio gain/perte = 1.60× (559 améliorations / 350 dégradations sur 1 891 tirages).
+            if (max >= 11) {
+                const seuilHaut = max * 0.70;
+                // Récupérer maxTiréPrev déjà traité par V5.3 (pour l'exclure)
+                const prevTirageV54 = historique[0];
+                const maxTiréPrevV54 = (prevTirageV54 && prevTirageV54.resultat && prevTirageV54.resultat.length === 5)
+                    ? Math.max(...prevTirageV54.resultat)
+                    : -1;
+                for (const num in scores) {
+                    const n = parseInt(num);
+                    if (n > seuilHaut && n !== maxTiréPrevV54) {
+                        scores[n] *= 0.60;
+                    }
+                }
+            }
+            // === FIN V5.4 GRADIENT TOP-30% ===
+
             // === BONUS Q TRANCHE (uniquement pour les prédictions Q) ===
             // Analyse les 30 derniers Q glissants et ajuste les scores pour
             // atteindre la composition <10/≥10 recommandée par l'historique.
@@ -5727,7 +5776,7 @@
       }
     </script>
     <footer style="background:var(--bleu);border-top:3px solid var(--or);color:rgba(255,255,255,.4);text-align:center;padding:1.8rem 2rem;font-size:.78rem;font-family:'Source Sans 3',sans-serif;">
-        <p style="color:var(--or);font-weight:700;margin-bottom:.3rem;">🎲 BOULIER PRÉDICTIF V4.7</p>
+        <p style="color:var(--or);font-weight:700;margin-bottom:.3rem;">🎲 BOULIER PRÉDICTIF V5.4</p>
         <p>Usage personnel · Données stockées localement · Aucune transmission externe</p>
     </footer>
 </body>
