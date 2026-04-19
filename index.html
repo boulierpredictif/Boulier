@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V5.5</title>
+    <title>Boulier Prédictif V5.6</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap');
 
@@ -524,7 +524,7 @@
     <div class="site-header">
         <div class="header-inner">
             <div class="header-tag">Outil prédictif · Boulier électrique</div>
-            <h1>🎲 Boulier Prédictif <span class="version">V5.5</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V5.6</span></h1>
         </div>
     </div>
 
@@ -614,6 +614,12 @@
                 
                 <div class="stats-grid" id="home-stats"></div>
                 
+                <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.6 — Recalibrage Q16 + fix localStorage + fix gel navigateur</div>
+                    <div><strong>(1) Recalibrage bonus Q16</strong> : bonus [9, 14] portés de +2.0 à +3.0 (signal miss/FP = 7/1 pour le 9, 6/4 pour le 14 sur 18 draws post-V5.5).<br>
+                    <strong>(2) Fix localStorage saturé</strong> : predictionDetails.methodScores (~1.5 KB × 3356 tirages = 5.6 MB) purgé après enregistrement du résultat + migration one-shot au chargement → ~0.9 MB. Bannière d'alerte si quota atteint.<br>
+                    <strong>(3) Fix gel navigateur (prédiction non affichée)</strong> : <em>analysePostQContexte</em> appelait <em>isInPostQZone</em> O(n) fois pour chaque tirage → O(n²) total (~68M itérations avec 3371 tirages, gel ~5-10 s sur Mac). Remplacé par un pré-calcul O(n log n) en une seule passe triée.</div>
+                </div>
                 <div class="alert alert-info">
                     <div class="alert-title">🔧 V5.5 — Trois corrections moteur Q</div>
                     <div>Corrections ciblées sur les tirages Q, validées par simulation sur 68 tirages Q réels :<br>
@@ -1409,13 +1415,74 @@
         
         // Storage
         function saveToStorage() {
-            localStorage.setItem('boulier-tirages-v32', JSON.stringify(tirages));
-            localStorage.setItem('boulier-matrices-v32', JSON.stringify(markovMatrices));
-            localStorage.setItem('boulier-ngrams-v32', JSON.stringify(nGrams));
-            localStorage.setItem('boulier-weights-v32', JSON.stringify(methodWeights));
+            // Forcer le slim de tous les tirages résolus avant sérialisation.
+            // Garantit que même si la migration loadFromStorage n'a pas encore pu sauvegarder
+            // (ex. Safari qui bloque le premier setItem), on n'écrit jamais > ~1 MB.
+            tirages.forEach(t => {
+                if (t.resultat && t.resultat.length > 0) slimPredictionDetails(t);
+            });
+            const tiragesToSave = JSON.stringify(tirages);
+            try {
+                // removeItem avant setItem : contourne le bug Safari qui comptabilise
+                // ancienne + nouvelle taille au lieu de juste la nouvelle.
+                localStorage.removeItem('boulier-tirages-v32');
+                localStorage.removeItem('boulier-matrices-v32');  // purge clé inutilisée
+                localStorage.removeItem('boulier-ngrams-v32');    // purge clé inutilisée
+                localStorage.setItem('boulier-tirages-v32', tiragesToSave);
+                localStorage.setItem('boulier-weights-v32', JSON.stringify(methodWeights));
+            } catch (e) {
+                if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+                    if (tiragesToSave.length > 4000000) {
+                        showQuotaWarning();
+                    } else {
+                        console.warn('saveToStorage: quota Safari malgré données légères (' +
+                            (tiragesToSave.length / 1024).toFixed(0) + ' KB). Ignoré.');
+                    }
+                } else {
+                    console.error('saveToStorage error:', e);
+                }
+            }
             // Notification de sauvegarde automatique tous les 10 tirages
             if (tirages.length > 0 && tirages.length % 10 === 0) {
                 showSaveNotification();
+            }
+        }
+
+        // Alerte quota localStorage (iOS Safari / GitHub Pages)
+        function showQuotaWarning() {
+            if (document.getElementById('quota-warning-notif')) return;
+            const notif = document.createElement('div');
+            notif.id = 'quota-warning-notif';
+            notif.style.cssText = `
+                position: fixed; top: 20px; right: 20px;
+                background: #fef2f2; border: 2px solid #ef4444;
+                padding: 15px 20px; border-radius: 8px;
+                box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                z-index: 10000; min-width: 320px;
+            `;
+            notif.innerHTML = `
+                <div style="font-weight: 700; margin-bottom: 4px; color: #991b1b;">⚠️ Stockage local saturé</div>
+                <div style="font-size: 13px; color: #374151; margin-bottom: 12px;">Impossible de sauvegarder dans le navigateur (quota dépassé). Exportez un JSON pour sécuriser vos données.</div>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <button onclick="exportJSON(); document.getElementById('quota-warning-notif').remove();"
+                        style="background:#ef4444; color:white; border:none; padding:8px 14px; border-radius:6px; cursor:pointer; font-size:13px; font-weight:600;">
+                        💾 Exporter JSON maintenant
+                    </button>
+                    <button onclick="document.getElementById('quota-warning-notif').remove();"
+                        style="background:white; border:1px solid #d1d5db; padding:8px 14px; border-radius:6px; cursor:pointer; font-size:13px; color:#6b7280;">
+                        Ignorer
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(notif);
+        }
+
+        // Supprime methodScores de predictionDetails une fois le résultat enregistré.
+        // Conserve uniquement confidence (utilisé dans l'historique).
+        // Réduit la taille localStorage de ~5.6 MB → ~0.9 MB.
+        function slimPredictionDetails(tirage) {
+            if (tirage.predictionDetails && tirage.predictionDetails.methodScores) {
+                tirage.predictionDetails = { confidence: tirage.predictionDetails.confidence };
             }
         }
 
@@ -1494,6 +1561,30 @@
             }
             
             if (stored) tirages = JSON.parse(stored);
+
+            // Migration V5.6 — one-shot : supprimer methodScores des tirages déjà résolus.
+            // Réduit le localStorage de ~5.6 MB → ~0.9 MB sur iOS Safari.
+            // Les poids sont déjà sauvegardés séparément dans boulier-weights-v32.
+            if (stored) {
+                let slimmed = false;
+                tirages.forEach(t => {
+                    if (t.resultat && t.resultat.length > 0 &&
+                        t.predictionDetails && t.predictionDetails.methodScores) {
+                        t.predictionDetails = { confidence: t.predictionDetails.confidence };
+                        slimmed = true;
+                    }
+                });
+                if (slimmed) {
+                    try {
+                        // removeItem d'abord : évite le double-comptage Safari (ancienne + nouvelle taille)
+                        localStorage.removeItem('boulier-tirages-v32');
+                        localStorage.setItem('boulier-tirages-v32', JSON.stringify(tirages));
+                        console.log('Migration V5.6 : predictionDetails.methodScores purgés → localStorage allégé');
+                    } catch(e) {
+                        console.warn('Migration V5.6 : save post-slim échoué', e);
+                    }
+                }
+            }
             
             const matrices = localStorage.getItem('boulier-matrices-v32');
             if (matrices) markovMatrices = JSON.parse(matrices);
@@ -2225,7 +2316,7 @@
                     nombres: selected,
                     probabilites: selected.map(() => (100 / 5).toFixed(1)),
                     confidence: 'low',
-                    methodScores: {},
+                    methodScores: { markov: {}, ngrams: {}, cooccurrence: {}, frequency: {}, empirical: {} },
                     alerts: []
                 };
             }
@@ -2349,10 +2440,12 @@
                 if (scores[15] !== undefined) methodScores.empirical[15] += 2.5;
             }
             // Max16 : V5.5 recalibrage Q — retrait du 5 (surprédit 66% vs 33% réel),
-            // ajout 9 (ratio 2.5×) et 14 (ratio 2.4×) sur base de 45 tirages Q16 réels
-            if (max === 16) [8, 2, 9, 14].forEach(n => {
-                if (scores[n] !== undefined) methodScores.empirical[n] += 2.0;
-            });
+            // ajout 9 (ratio 2.5×) et 14 (ratio 2.4×) sur base de 45 tirages Q16 réels.
+            // V5.6 : bonus 9 et 14 portés à +3.0 (18 draws post-V5.5 : 9→7 miss/1FP, 14→6 miss/4FP).
+            if (max === 16) {
+                [8, 2].forEach(n => { if (scores[n] !== undefined) methodScores.empirical[n] += 2.0; });
+                [9, 14].forEach(n => { if (scores[n] !== undefined) methodScores.empirical[n] += 3.0; });
+            }
             // FIX V3.8 — Règles empiriques grands max (17+) manquantes
             if (max === 17) { [9,11,14,17].forEach(n => { if (scores[n]!==undefined) methodScores.empirical[n]+=2.0; }); }
             if (max === 18) { [10,12,15,18].forEach(n => { if (scores[n]!==undefined) methodScores.empirical[n]+=2.0; }); }
@@ -3470,13 +3563,51 @@
             const aujourdHui = new Date().toISOString().slice(0, 10);
             const cinqJoursQ = getDernieresSessionsQ(5);
 
+            // === FIX V5.6 : pré-calcul O(n log n) de toutes les zones Post-Q ===
+            // Remplace les appels isInPostQZone(index) dans les 3 boucles ci-dessous
+            // (ancienne complexité : O(n²) → gel navigateur à partir de ~2500 tirages).
+            // Stratégie : trier les tirages par date, avancer un compteur de distance
+            // depuis le dernier Q avec résultat, construire une Map index→{inZone,distance}.
+            const postQZoneMap = (() => {
+                const map = new Map(); // originalIndex → { inZone, distance, qCode }
+                // Trier par date croissante, Q avant non-Q à date égale (cohérent avec isInPostQZone)
+                const indexed = tirages
+                    .map((t, i) => ({ t, i, ms: new Date(t.date).getTime() }))
+                    .filter(({ t }) => !t.annule)
+                    .sort((a, b) => a.ms - b.ms || (a.t.code && a.t.code.startsWith('Q') ? -1 : 1));
+
+                let lastQCode = null;
+                let countSinceQ = 0;
+
+                for (const { t, i } of indexed) {
+                    if (t.code && t.code.startsWith('Q')) {
+                        if (t.resultat && t.resultat.length > 0) {
+                            lastQCode = t.code;
+                            countSinceQ = 0;
+                        }
+                    } else {
+                        if (lastQCode !== null) {
+                            countSinceQ++;
+                            const d = countSinceQ;
+                            map.set(i, d <= postQWindow
+                                ? { inZone: true,  distance: d,  qCode: lastQCode }
+                                : { inZone: false, distance: 0,  qCode: null });
+                        } else {
+                            map.set(i, { inZone: false, distance: 0, qCode: null });
+                        }
+                    }
+                }
+                return map;
+            })();
+            // === FIN FIX V5.6 ===
+
             // Fréquences historiques exactement à cette distance (P1-P3)
             const histoADistance = {};
             let totalADistance = 0;
             tirages.forEach((tirage, index) => {
                 if (tirage.code && tirage.code.startsWith('Q')) return;
                 if (tirage.annule) return;
-                const info = isInPostQZone(index);
+                const info = postQZoneMap.get(index) || { inZone: false };
                 if (!info.inZone || info.distance !== distanceCourante) return;
                 if (!tirage.resultat || tirage.resultat.length === 0) return;
                 totalADistance++;
@@ -3495,7 +3626,7 @@
                 if (!tirage.resultat || tirage.resultat.length === 0) return;
                 const jourTirage = new Date(tirage.date).toISOString().slice(0, 10);
                 if (jourTirage !== aujourdHui) return;
-                const info = isInPostQZone(index);
+                const info = postQZoneMap.get(index) || { inZone: false };
                 if (!info.inZone) return;
                 totalJour++;
                 tirage.resultat.forEach((num, pos) => {
@@ -3514,7 +3645,7 @@
                 if (!tirage.resultat || tirage.resultat.length === 0) return;
                 const jourTirage = new Date(tirage.date).toISOString().slice(0, 10);
                 if (!cinqJoursQ.includes(jourTirage)) return;
-                const info = isInPostQZone(index);
+                const info = postQZoneMap.get(index) || { inZone: false };
                 if (!info.inZone) return;
                 totalCinq++;
                 tirage.resultat.forEach((num, pos) => {
@@ -3751,6 +3882,9 @@
             
             saveToStorage();
             
+            // Affichage — enveloppé dans try/catch pour éviter tout échec silencieux.
+            // En cas d'erreur inattendue, un message s'affiche dans prediction-result.
+            try {
             // Afficher les alertes
             let alertsHtml = '';
             if (prediction.alerts && prediction.alerts.length > 0) {
@@ -3817,6 +3951,7 @@
                 
                 for (const [key, name] of Object.entries(methods)) {
                     const methodData = prediction.methodScores[key];
+                    if (!methodData) continue; // méthode absente du retour anticipé (relatedTirages vide)
                     const topNums = Object.entries(methodData)
                         .sort((a, b) => b[1] - a[1])
                         .slice(0, 5);
@@ -3881,6 +4016,12 @@
             html += '</div>';
             
             document.getElementById('prediction-result').innerHTML = html;
+            } catch(displayErr) {
+                console.error('generatePrediction display error:', displayErr);
+                document.getElementById('prediction-result').innerHTML =
+                    '<div class="alert alert-warning" style="margin-top:20px;">⚠️ <strong>Erreur d\'affichage (' + displayErr.name + ')</strong> : ' + displayErr.message +
+                    '<br><small style="color:#6b7280;">Prédiction enregistrée. Ouvrez la console (⌥⌘J) pour le détail.</small></div>';
+            }
         }
         
         // ═══════════════════════════════════════════════════════════════════
@@ -4234,6 +4375,7 @@
                     
                     // Mise à jour des poids des méthodes (apprentissage adaptatif renforcé)
                     updateMethodWeights(tirage, true);
+                    slimPredictionDetails(tirage); // libère ~1.5 KB par tirage
                 }
                 // Bilan paris — capturer coefficient et résultat pari (optionnel)
                 const coeffEl = document.getElementById('coeff-' + id);
@@ -4294,6 +4436,7 @@
                     
                     // Mise à jour des poids des méthodes (apprentissage adaptatif renforcé)
                     updateMethodWeights(tirage, true);
+                    slimPredictionDetails(tirage); // libère ~1.5 KB par tirage
                 }
                 // Bilan paris — capturer coefficient et résultat pari (optionnel)
                 const coeffEl = document.getElementById('coeff-input-' + id);
@@ -4926,6 +5069,7 @@
 
             tirages.unshift(newTirage);
             if (challenger) updateMethodWeights(newTirage, true);
+            slimPredictionDetails(newTirage); // libère ~1.5 KB par tirage
             tirages.sort((a,b) => new Date(b.date) - new Date(a.date));
             saveToStorage();
             updateHome();
@@ -5316,6 +5460,7 @@
                     tirages.unshift(newTirage);
                     // Apprentissage avec learning rate challengé
                     updateMethodWeights(newTirage, true);
+                    slimPredictionDetails(newTirage); // libère ~1.5 KB par tirage
                     totalTraites++;
                     totalScores += score;
                     nbScores++;
@@ -5830,7 +5975,7 @@
       }
     </script>
     <footer style="background:var(--bleu);border-top:3px solid var(--or);color:rgba(255,255,255,.4);text-align:center;padding:1.8rem 2rem;font-size:.78rem;font-family:'Source Sans 3',sans-serif;">
-        <p style="color:var(--or);font-weight:700;margin-bottom:.3rem;">🎲 BOULIER PRÉDICTIF V5.5</p>
+        <p style="color:var(--or);font-weight:700;margin-bottom:.3rem;">🎲 BOULIER PRÉDICTIF V5.6</p>
         <p>Usage personnel · Données stockées localement · Aucune transmission externe</p>
     </footer>
 </body>
