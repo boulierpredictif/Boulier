@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V5.6</title>
+    <title>Boulier Prédictif V5.10</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap');
 
@@ -524,7 +524,7 @@
     <div class="site-header">
         <div class="header-inner">
             <div class="header-tag">Outil prédictif · Boulier électrique</div>
-            <h1>🎲 Boulier Prédictif <span class="version">V5.6</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V5.10</span></h1>
         </div>
     </div>
 
@@ -614,6 +614,40 @@
                 
                 <div class="stats-grid" id="home-stats"></div>
                 
+                <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.10 — Règle rebond différé du 7 ⚠️ provisoire (~90 cas/groupe)</div>
+                    <div>
+                    Deux règles additives sur le numéro 7, valides pour tout tirage avec max ≥ 7 (286 tirages analysés, validation H1/H2) :<br>
+                    <strong>Règle A — T+2 (7 absent)</strong> : si le 7 était absent du dernier tirage max=7 et que le tirage courant est le 2ème tirage max≥7 depuis → bonus +2.0 direct sur scores[7]. Taux : 38,9% vs baseline 26,0% (+12,9 pt).<br>
+                    <strong>Règle B — T+3 (7 en pos1/2)</strong> : si le 7 était en position 1 ou 2 du dernier tirage max=7 et que le tirage courant est le 3ème tirage max≥7 depuis → bonus +2.0 direct sur scores[7]. Taux : 38,0% vs baseline 26,0% (+12,0 pt).<br>
+                    T+1 : aucune règle (instable, proche baseline). Bonus appliqué post-combinaison directement sur scores (même logique V5.7/V5.8/V5.9).
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.9 — Quatre corrections spécifiques tirages Q (analyse 117 tirages)</div>
+                    <div>
+                    <strong>Fix 1 — Bonus P1∈Q_prev et qVeille→P1 déplacés post-combinaison</strong> : ces deux bonus étaient injectés dans methodScores.empirical (poids 0.15) → seulement ×0.15 d'effet réel. Même bug que V5.7 Fix 3 et V5.8. Désormais appliqués directement sur scores après combinaison pondérée.<br>
+                    <strong>Fix 2 — Retard P1 par numéro sur tous Q</strong> : nouvelle règle calculant pour chaque numéro son retard spécifique en position 1 sur TOUS les tirages Q (toutes modalités confondues). Seuil modéré ≥8 → +3.0 direct ; seuil fort ≥15 → +6.0 direct + alerte rouge. Ex. observé : numéro 8 absent en P1 depuis 37 tirages Q le 16/05/2026.<br>
+                    <strong>Fix 3 — Retard présence cross-modalités Q</strong> : relatedTirages filtre par max — les Q d'autres modalités (QA16, QP16, QH16…) n'étaient pas comptabilisés ensemble. Nouveau calcul sur tous les Q éligibles (max≥num) pour détecter les sécheresses cross-modalités. Seuil ≥6 → bonus ; ≥8 → alerte rouge. Ex. : numéro 5 absent depuis 9 Q éligibles le 16/05/2026.<br>
+                    <strong>Fix 4 — Bonus empirique +1.5 pour le numéro 4 sur Q max=16</strong> : déficit structurel observé de −11pt (20.3% vs 31.2% théorique sur 79 tirages Q16).
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.8 — Fix bonus retard nombres critiques (post-combinaison)</div>
+                    <div>
+                    <strong>Même défaut structurel que V5.7 Fix 3, sur la règle des retards critiques.</strong><br>
+                    L'ancien code ajoutait <code>bonusFort=15</code> dans <code>methodScores.empirical</code> (poids 0.15) → seulement <strong>+2.25</strong> dans le score final, puis V5.4 ×0.60 → net ~+1.35. Le nombre en retard restait systématiquement sous les concurrents non pénalisés (constat direct : A12 du 16/05/2026, 10 absent depuis 7 tirages → absent de la prédiction, sorti en 3ème position avec 5 7 10 6 9).<br>
+                    Correction : bonus appliqué directement sur <code>scores</code> après V5.4, avec <code>bonusFort=+5.0</code> direct (suffisant pour contrebalancer la pénalité V5.4 ×0.60 sur les hauts nombres). <code>bonusBase</code> = retard × 0.25 (proportionnel, actif sous le seuil aussi).
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.7 — Trois corrections comportementales (Post-Q + pattern 2→3)</div>
+                    <div>
+                    <strong>(1) Post-Q limité au jour du tirage Q</strong> : la zone Post-Q ne déborde plus sur le lendemain. Si le dernier Q appartient à un jour calendaire différent du tirage à prédire, la zone est inactive. Les tirages du matin repartent toujours sans zone Post-Q.<br>
+                    <strong>(2) Pattern "2 derniers → 3 premiers" désactivé au 1er tirage de la journée</strong> : si le dernier tirage enregistré est de la veille, la règle ne s'applique pas — l'alerte était illégitime car elle comparait des séquences inter-journées.<br>
+                    <strong>(3) Bonus "2 derniers → 3 premiers" effectif sur la prédiction</strong> : le bonus était ajouté dans methodScores.empirical (poids 0.15) → seulement ×0.15 dans le score final, sans effet réel sur la sélection. Désormais appliqué directement sur scores après la combinaison pondérée, identiquement aux corrections V5.3 et V5.4.
+                    </div>
+                </div>
                 <div class="alert alert-info">
                     <div class="alert-title">🔧 V5.6 — Recalibrage Q16 + fix localStorage + fix gel navigateur</div>
                     <div><strong>(1) Recalibrage bonus Q16</strong> : bonus [9, 14] portés de +2.0 à +3.0 (signal miss/FP = 7/1 pour le 9, 6/4 pour le 14 sur 18 draws post-V5.5).<br>
@@ -1840,6 +1874,13 @@
 
             // Le tirage immédiatement précédent, quel que soit son type
             const lastTirage = allWithResults[0];
+
+            // === V5.7 FIX 2 : bloquer la règle si le dernier tirage est d'un autre jour ===
+            // Au 1er tirage de la journée, lastTirage est celui de la veille → alerte illégitime.
+            const lastTirageDay = new Date(lastTirage.date).toISOString().slice(0, 10);
+            if (lastTirageDay !== predDay) return null;
+            // === FIN V5.7 FIX 2 ===
+
             const twoLastNumbers = [lastTirage.resultat[3], lastTirage.resultat[4]];
 
             // Mesurer le retard du pattern sur des paires consécutives tous types confondus
@@ -2511,20 +2552,11 @@
             }
             
             // 5b. RÈGLE DU RETARD DES NOMBRES MAX
-            // BUG 3 FIX RÉEL : le bonus fort est appliqué ICI dans methodScores,
-            // AVANT la combinaison pondérée, pour garantir la présence dans le top 5.
+            // V5.8 FIX : le résultat est stocké et appliqué APRÈS la combinaison pondérée + V5.4,
+            // directement sur scores (même logique que V5.7 Fix 3).
+            // L'ancien commentaire "BUG 3 FIX RÉEL" était erroné : bonusFort=15 × poids 0.15
+            // = +2.25 réel, écrasé ensuite par V5.4 ×0.60. Inefficace.
             const maxDelays = checkMaxNumberDelay(parsed, historique);
-            for (const num in maxDelays) {
-                const n = parseInt(num);
-                const delay = maxDelays[num];
-                if (scores[n] !== undefined) {
-                    const bonusBase = delay * 0.3;
-                    // Retard ≥ seuil (3 pour max≤16, 5 pour max>16) : bonus fort qui garantit l'entrée dans le top 5
-                    const bonusSeuil = max <= 16 ? 3 : 5;
-                    const bonusFort = delay >= bonusSeuil ? 15 : 0;
-                    methodScores.empirical[n] += bonusBase + bonusFort;
-                }
-            }
             
             // 5c. RÈGLE DE RÉCURRENCE Q
             const qRecurrence = checkQRecurrence(parsed, historique);
@@ -2537,21 +2569,9 @@
                 });
             }
             
-            // 5d. RÈGLE "2 DERNIERS → 3 PREMIERS" 🆕 NOUVELLE !
+            // 5d. RÈGLE "2 DERNIERS → 3 PREMIERS"
+            // Le résultat est stocké et appliqué APRÈS la combinaison pondérée (V5.7 FIX 3).
             const twoLastPattern = checkTwoLastToThreeFirst(parsed, historique, parsed._predDate);
-            if (twoLastPattern && twoLastPattern.twoLastNumbers.length > 0) {
-                // Bonus fort : +1.5 normal ou +3.0 début de journée
-                const baseBonus = 3.0; // Toujours fort : règle déjà filtrée au début de journée
-                // Bonus supplémentaire si le pattern est en retard
-                const delayBonus = twoLastPattern.patternMisses * 0.4;
-                const totalBonus = baseBonus + delayBonus;
-                
-                twoLastPattern.twoLastNumbers.forEach(num => {
-                    if (scores[num] !== undefined) {
-                        methodScores.empirical[num] += totalBonus;
-                    }
-                });
-            }
 
             // 5e. RÉCURRENCE INTER-TIRAGES
             // Numéros des 2-3 tirages précédents du même type qui ont une propension
@@ -2566,34 +2586,26 @@
                 }
             }
 
-            // === V5.5 CORRECTION 3 : Boost P1 ∈ Q_précédent à retard élevé ===
-            // Quand P1 ∈ Q_précédent ne s'est pas produit depuis ≥4 Q consécutifs,
-            // la probabilité marginale monte à ~39% vs 31% théorique.
-            // Boost +3.0 sur les 5 numéros du Q immédiatement précédent.
-            // S'applique uniquement aux prédictions Q. Ratio 1.5× sur 18 cas.
+            // === V5.5 CORRECTION 3 (refactoré V5.9) : Boost P1 ∈ Q_précédent à retard élevé ===
+            // V5.9 : stocké pour application post-combinaison (ancien methodScores.empirical ×0.15 = inefficace)
+            let qP1RetardBonus = null; // { nums: [], retard: n }
             if (prefixe === 'Q') {
-                // Trouver le dernier tirage Q (tous types Q) avec résultat
                 const allQAvec = historique.filter(t =>
                     t.code && t.code.startsWith('Q') &&
                     t.resultat && t.resultat.length === 5
                 );
                 if (allQAvec.length >= 2) {
                     const dernierQ = allQAvec[0];
-                    // Calculer le retard : combien de Q consécutifs sans P1∈Q_prev ?
                     let retardP1 = 0;
                     for (let qi = 0; qi < allQAvec.length - 1; qi++) {
                         const curr = allQAvec[qi];
                         const prev = allQAvec[qi + 1];
                         const p1curr = curr.resultat[0];
-                        if (prev.resultat.includes(p1curr)) break; // événement survenu → fin
+                        if (prev.resultat.includes(p1curr)) break;
                         retardP1++;
                     }
                     if (retardP1 >= 4) {
-                        dernierQ.resultat.forEach(num => {
-                            if (scores[num] !== undefined) {
-                                methodScores.empirical[num] += 3.0;
-                            }
-                        });
+                        qP1RetardBonus = { nums: dernierQ.resultat, retard: retardP1 };
                         alerts.push({
                             type: 'danger',
                             message: `🎯 <strong>Retard P1 élevé (${retardP1} Q sans répétition)</strong> : les numéros du Q précédent [${dernierQ.resultat.join(', ')}] sont fortement favorisés en position 1`
@@ -2625,15 +2637,12 @@
                 }
             }
             const qVeille = shouldCheckQVeille ? calcQVeilleP1(historique) : null;
+            // V5.9 : stocké pour application post-combinaison
+            let qVeilleBonus = null; // { nums: [], bonus: n }
             if (qVeille && qVeille.probability > 0.30 && qVeille.sampleSize >= 5) {
-                // Bonus de base, amplifié par le streak (plus la série est longue, plus c'est dû)
-                const streakAmplifier = 1 + Math.min((qVeille.streak || 0) * 0.15, 0.75); // max +75%
+                const streakAmplifier = 1 + Math.min((qVeille.streak || 0) * 0.15, 0.75);
                 const bonusQVeille = qVeille.probability * 4.0 * streakAmplifier * qVeilleAttenuation;
-                qVeille.nums.forEach(num => {
-                    if (scores[num] !== undefined) {
-                        methodScores.empirical[num] += bonusQVeille;
-                    }
-                });
+                qVeilleBonus = { nums: qVeille.nums, bonus: bonusQVeille };
 
                 // Alerte streak croissante
                 const streak = qVeille.streak || 0;
@@ -2674,6 +2683,22 @@
                     methodScores.empirical[n] * methodWeights.empirical;
             }
             
+            // === V5.7 FIX 3 : RÈGLE "2 DERNIERS → 3 PREMIERS" — application post-combinaison ===
+            // Le bonus était ajouté dans methodScores.empirical (poids 0.15) → résultat ×0.15
+            // seulement dans le score final, trop faible pour influer sur la sélection.
+            // Correction : bonus appliqué directement sur scores, comme V5.3 et V5.4.
+            if (twoLastPattern && twoLastPattern.twoLastNumbers.length > 0) {
+                const baseBonus = 3.0;
+                const delayBonus = twoLastPattern.patternMisses * 0.4;
+                const totalBonus = baseBonus + delayBonus;
+                twoLastPattern.twoLastNumbers.forEach(num => {
+                    if (scores[num] !== undefined) {
+                        scores[num] += totalBonus;
+                    }
+                });
+            }
+            // === FIN V5.7 FIX 3 ===
+
             // === V5.3 : PÉNALITÉ POS4 CONDITIONNELLE ===
             // Le numéro le plus élevé tiré au draw immédiatement précédent (tous types)
             // répète à 13–29 % selon le max, contre 22–50 % théoriques (–15 à –25 pts).
@@ -2711,6 +2736,161 @@
                 }
             }
             // === FIN V5.4 GRADIENT TOP-30% ===
+
+            // === V5.8 : BONUS RETARD NOMBRES CRITIQUES — application post-combinaison + post-V5.4 ===
+            // L'ancien code ajoutait bonusFort=15 dans methodScores.empirical (poids 0.15)
+            // → +2.25 réel dans scores, puis V5.4 ×0.60 → net ~+1.35 seulement.
+            // Résultat : le nombre en retard reste sous les concurrents non pénalisés.
+            // Correction : bonus direct sur scores APRÈS V5.4, pour que le retard puisse
+            // réellement contrebalancer la pénalité structurelle sur les hauts nombres.
+            // bonusFort recalibré à +5 direct (≡ à l'ancien +33 pre-combo, jamais atteint).
+            if (maxDelays && Object.keys(maxDelays).length > 0) {
+                const bonusSeuil = max <= 16 ? 3 : 5;
+                for (const num in maxDelays) {
+                    const n = parseInt(num);
+                    const delay = maxDelays[num];
+                    if (scores[n] !== undefined) {
+                        const bonusBase = delay * 0.25;          // proportionnel au retard
+                        const bonusFort = delay >= bonusSeuil ? 5.0 : 0; // override V5.4 garanti
+                        scores[n] += bonusBase + bonusFort;
+                    }
+                }
+            }
+            // === FIN V5.8 BONUS RETARD ===
+
+            // === V5.9 : CORRECTIONS SPÉCIFIQUES TIRAGES Q ===
+            // Quatre corrections basées sur l'analyse de 117 tirages Q (jan–mai 2026) :
+            // Fix 1 : bonus P1∈Q_prev et qVeille désormais post-combinaison (étaient dans methodScores.empirical × 0.15)
+            // Fix 2 : retard P1 par numéro sur TOUS les Q (signal le 8 : 37 Q sans P1)
+            // Fix 3 : retard présence sur TOUS les Q toutes modalités (signal le 5 : 9 Q sans sortie)
+            // Fix 4 : bonus empirique +1.5 pour le numéro 4 sur Q max=16 (déficit structurel −11pt)
+            if (prefixe === 'Q') {
+
+                // --- Fix 1a : bonus P1∈Q_prev (V5.5, maintenant post-combo) ---
+                if (qP1RetardBonus) {
+                    const bonusFort = 3.0 + qP1RetardBonus.retard * 0.2; // croît avec le retard
+                    qP1RetardBonus.nums.forEach(num => {
+                        if (scores[num] !== undefined) scores[num] += bonusFort;
+                    });
+                }
+
+                // --- Fix 1b : bonus qVeille → P1 (maintenant post-combo) ---
+                if (qVeilleBonus) {
+                    qVeilleBonus.nums.forEach(num => {
+                        if (scores[num] !== undefined) scores[num] += qVeilleBonus.bonus;
+                    });
+                }
+
+                // --- Fix 2 : retard P1 par numéro sur TOUS les Q éligibles ---
+                // Pour chaque numéro, compter combien de tirages Q consécutifs (en remontant)
+                // ce numéro n'est PAS sorti en position 1.
+                // Seuil fort : ≥15 → +6.0 | seuil modéré : ≥8 → +3.0 | base : retard × 0.15
+                const allQHisto = historique.filter(t =>
+                    t.code && t.code.startsWith('Q') &&
+                    t.resultat && t.resultat.length === 5
+                );
+                if (allQHisto.length >= 5) {
+                    for (const numStr in scores) {
+                        const num = parseInt(numStr);
+                        // Seulement si ce numéro est éligible dans ce tirage Q
+                        if (num > max) continue;
+                        let retardP1Num = 0;
+                        for (const qt of allQHisto) {
+                            const qmax = qt.parsed ? qt.parsed.max : parseInt((qt.code || '').replace(/\D/g,'')) || 16;
+                            if (qmax < num) continue; // tirage où ce num n'était pas éligible → skip
+                            if (qt.resultat[0] === num) break; // sorti en P1 → arrêt
+                            retardP1Num++;
+                        }
+                        if (retardP1Num >= 8) {
+                            const bonusP1Num = (retardP1Num * 0.15) +
+                                              (retardP1Num >= 15 ? 6.0 : retardP1Num >= 8 ? 3.0 : 0);
+                            scores[num] += bonusP1Num;
+                            if (retardP1Num >= 15) {
+                                alerts.push({
+                                    type: 'danger',
+                                    message: `🔴 <strong>Retard P1 exceptionnel : numéro ${num}</strong> absent en position 1 depuis ${retardP1Num} tirages Q consécutifs`
+                                });
+                            } else if (retardP1Num >= 8) {
+                                alerts.push({
+                                    type: 'warning',
+                                    message: `⚠️ <strong>Retard P1 Q : numéro ${num}</strong> absent en position 1 depuis ${retardP1Num} tirages Q`
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // --- Fix 3 : retard présence sur TOUS les Q toutes modalités ---
+                // relatedTirages (même max) ne couvre pas les Q d'autres modalités.
+                // Pour les Q, calculer le retard cross-modalités et appliquer un bonus
+                // complémentaire si retard éligibles ≥ 6.
+                if (allQHisto.length >= 5) {
+                    for (const numStr in scores) {
+                        const num = parseInt(numStr);
+                        if (num > max) continue;
+                        let retardCrossQ = 0;
+                        for (const qt of allQHisto) {
+                            const qmax = qt.parsed ? qt.parsed.max : parseInt((qt.code || '').replace(/\D/g,'')) || 16;
+                            if (qmax < num) continue; // non éligible → skip
+                            if (qt.resultat.includes(num)) break; // sorti → arrêt
+                            retardCrossQ++;
+                        }
+                        if (retardCrossQ >= 6) {
+                            const bonusCross = retardCrossQ * 0.3 + (retardCrossQ >= 8 ? 3.0 : 1.5);
+                            scores[num] += bonusCross;
+                            if (retardCrossQ >= 8) {
+                                alerts.push({
+                                    type: 'danger',
+                                    message: `🔴 <strong>Sécheresse Q critique : numéro ${num}</strong> absent depuis ${retardCrossQ} tirages Q éligibles consécutifs`
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // --- Fix 4 : bonus empirique numéro 4 sur Q max=16 ---
+                // Déficit structurel observé : 20.3% vs 31.2% théorique (−11pt sur 79 tirages)
+                if (max === 16 && scores[4] !== undefined) {
+                    scores[4] += 1.5;
+                }
+            }
+            // === FIN V5.9 CORRECTIONS Q ===
+
+            // === V5.10 : RÈGLE REBOND DIFFÉRÉ DU 7 (PROVISOIRE ~90 cas/groupe) ===
+            // Signal A : 7 absent du dernier tirage max=7 → bonus au T+2 (2ème tirage max≥7 suivant)
+            //   Taux observé : 38,9% vs baseline 26,0% (+12,9 pt, cohérent H1/H2)
+            // Signal B : 7 en pos1 ou pos2 du dernier tirage max=7 → bonus au T+3 (3ème tirage max≥7 suivant)
+            //   Taux observé : 38,0% vs baseline 26,0% (+12,0 pt, cohérent H1/H2)
+            // T+1 : aucune règle (signal instable, proche baseline)
+            // Bonus appliqué post-combinaison directement sur scores (même logique V5.7 Fix3 / V5.8 / V5.9)
+            if (max >= 7 && scores[7] !== undefined) {
+                // Trouver le dernier tirage max=7 dans l'historique (historique[0] = plus récent)
+                const lastMax7Idx = historique.findIndex(t => t.parsed && t.parsed.max === 7);
+                if (lastMax7Idx !== -1) {
+                    const lastMax7 = historique[lastMax7Idx];
+                    if (lastMax7.resultat && lastMax7.resultat.length >= 2) {
+                        // Compter les tirages max≥7 survenus APRÈS lastMax7 (indices 0..lastMax7Idx-1)
+                        const tiragesApres = historique
+                            .slice(0, lastMax7Idx)
+                            .filter(t => t.parsed && t.parsed.max >= 7).length;
+
+                        const sept_absent = !lastMax7.resultat.includes(7);
+                        const sept_top2 = (lastMax7.resultat[0] === 7 || lastMax7.resultat[1] === 7);
+
+                        // Règle A : T+2 — 7 absent du dernier max=7, tirage courant est le 2ème max≥7 depuis
+                        if (sept_absent && tiragesApres === 1) {
+                            scores[7] += 2.0;
+                            alerts.push({ type: 'info', message: '🔁 Rebond T+2 — 7 absent du dernier max=7 (V5.10 ⚠️)' });
+                        }
+                        // Règle B : T+3 — 7 en pos1/2 du dernier max=7, tirage courant est le 3ème max≥7 depuis
+                        if (sept_top2 && tiragesApres === 2) {
+                            scores[7] += 2.0;
+                            alerts.push({ type: 'info', message: '🔁 Rebond T+3 — 7 en pos1/2 du dernier max=7 (V5.10 ⚠️)' });
+                        }
+                    }
+                }
+            }
+            // === FIN V5.10 REBOND 7 ===
 
             // === BONUS Q TRANCHE (uniquement pour les prédictions Q) ===
             // Analyse les 30 derniers Q glissants et ajuste les scores pour
@@ -3095,8 +3275,15 @@
             }
             if (!lastQ) return { inZone: false, distance: 0, qCode: null };
 
-            // Compter les tirages NON-Q entre lastQ et refDate
+            // === V5.7 FIX 1 : Post-Q limité au jour calendaire du tirage Q ===
+            // Un Q en fin de journée ne génère PAS de zone Post-Q le lendemain.
             var lastQDate = new Date(lastQ.date);
+            var lastQDayStr = lastQDate.toISOString().slice(0, 10);
+            var refDayStr   = refDate.toISOString().slice(0, 10);
+            if (lastQDayStr !== refDayStr) return { inZone: false, distance: 0, qCode: null };
+            // === FIN V5.7 FIX 1 ===
+
+            // Compter les tirages NON-Q entre lastQ et refDate
             var nbEntre = 0;
             for (var ti = 0; ti < tirages.length; ti++) {
                 var tt = tirages[ti];
