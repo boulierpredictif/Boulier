@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V5.10</title>
+    <title>Boulier Prédictif V5.12</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap');
 
@@ -524,7 +524,7 @@
     <div class="site-header">
         <div class="header-inner">
             <div class="header-tag">Outil prédictif · Boulier électrique</div>
-            <h1>🎲 Boulier Prédictif <span class="version">V5.10</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V5.12</span></h1>
         </div>
     </div>
 
@@ -614,6 +614,22 @@
                 
                 <div class="stats-grid" id="home-stats"></div>
                 
+                <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.12 — Alertes retard top3 + compteur P4/P5</div>
+                    <div>
+                    <strong>Constat</strong> : les alertes "absent depuis X tirages max Y" se réinitialisaient dès qu'un nombre sortait en P4 ou P5, masquant les vraies sécheresses positionnelles (ce qui compte c'est le top3).<br>
+                    <strong>Correction</strong> : deux compteurs distincts dans <code>checkMaxNumberDelay</code> — <code>delayTop3</code> (ne se remet à zéro qu'en P1/P2/P3) et <code>countP45</code> (apparitions en P4/P5 pendant la sécheresse top3). Message d'alerte : <em>"Le X absent du top3 depuis N tirages, sorti Y× en P4/P5 à max Z"</em>.<br>
+                    <strong>Impact moteur</strong> : V5.8 utilise désormais <code>delayTop3</code> pour le bonus retard — un nombre qui sort en P4/P5 continue d'accumuler un bonus vers le top3 (comportement plus correct).
+                    </div>
+                </div>
+                <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.11 — Correction anti-gradient universelle (max ≥ 11)</div>
+                    <div>
+                    <strong>Constat</strong> : V5.4 (pénalité ×0.60 sur n &gt; max×0.70) produit un déficit structurel de −15 à −28 pts sur les hauts numéros pour tous les max de 11 à 16. Analyse sur 5 006 tirages (mai 2026) — ex. max=14 : hauts [10–14] prédits à 6.8% vs fréquence réelle 35.1%.<br>
+                    <strong>Cause aggravante</strong> : les règles empiriques boostent les bas numéros via methodScores.empirical (poids ×0.15 → effet quasi nul), tandis que les hauts encaissent ×0.60 sans compensation suffisante.<br>
+                    <strong>Correction</strong> : bonus <code>+3.5</code> direct sur <code>scores[]</code> pour tous les nombres &gt; max×0.70, appliqué post-V5.4 et post-V5.8. Retard fort cumule : +5.0 (V5.8) + 3.5 (V5.11) = +8.5 total.
+                    </div>
+                </div>
                 <div class="alert alert-info">
                     <div class="alert-title">🔧 V5.10 — Règle rebond différé du 7 ⚠️ provisoire (~90 cas/groupe)</div>
                     <div>
@@ -1775,14 +1791,21 @@
             criticalNumbers.forEach(num => {
                 if (num > max) return;
                 
-                let delay = 0;
+                // V5.12 : deux compteurs distincts
+                // delayTop3 : tirages consécutifs sans apparition en P1/P2/P3 (réinitialisé seulement par P1-P3)
+                // countP45   : nb d'apparitions en P4/P5 pendant cette sécheresse top3
+                let delayTop3 = 0;
+                let countP45 = 0;
                 for (const tirage of relatedTirages) {
-                    if (tirage.resultat.includes(num)) break;
-                    delay++;
+                    const posTop3 = tirage.resultat.slice(0, 3).includes(num);
+                    if (posTop3) break;
+                    const posP45 = tirage.resultat.slice(3).includes(num);
+                    if (posP45) countP45++;
+                    delayTop3++;
                 }
                 
-                if (delay > 0) {
-                    delays[num] = delay;
+                if (delayTop3 > 0) {
+                    delays[num] = { delayTop3, countP45 };
                 }
             });
             
@@ -2748,15 +2771,36 @@
                 const bonusSeuil = max <= 16 ? 3 : 5;
                 for (const num in maxDelays) {
                     const n = parseInt(num);
-                    const delay = maxDelays[num];
+                    const delay = maxDelays[num].delayTop3; // V5.12 : utilise le retard top3
                     if (scores[n] !== undefined) {
-                        const bonusBase = delay * 0.25;          // proportionnel au retard
-                        const bonusFort = delay >= bonusSeuil ? 5.0 : 0; // override V5.4 garanti
+                        const bonusBase = delay * 0.25;
+                        const bonusFort = delay >= bonusSeuil ? 5.0 : 0;
                         scores[n] += bonusBase + bonusFort;
                     }
                 }
             }
             // === FIN V5.8 BONUS RETARD ===
+
+            // === V5.11 : CORRECTION ANTI-GRADIENT UNIVERSELLE ===
+            // Constat (analyse 5 006 tirages, mai 2026) : V5.4 (×0.60 sur n > max×0.70)
+            // produit un déficit structurel de −15 à −28 pts sur les hauts numéros pour
+            // tous les max de 11 à 16. Ex. max=14 : hauts [10–14] prédits à 6.8% vs réel 35.1%.
+            // Les règles empiriques amplifient le biais en boostant les bas numéros
+            // (dans methodScores.empirical ×0.15 → effet quasi nul sur scores finaux).
+            // Correction : bonus +3.5 direct sur scores[] pour tous les nombres > max×0.70,
+            // appliqué post-V5.4 et post-V5.8 (retard fort cumule : +5.0 + 3.5 = +8.5).
+            // Calibration : légèrement sous le bonusFort V5.8 (+5.0) pour ne pas écraser
+            // la hiérarchie des scores, mais suffisant pour rééquilibrer la sélection.
+            if (max >= 11) {
+                const seuilAntiGradient = max * 0.70;
+                for (const num in scores) {
+                    const n = parseInt(num);
+                    if (n > seuilAntiGradient) {
+                        scores[n] += 3.5;
+                    }
+                }
+            }
+            // === FIN V5.11 ANTI-GRADIENT ===
 
             // === V5.9 : CORRECTIONS SPÉCIFIQUES TIRAGES Q ===
             // Quatre corrections basées sur l'analyse de 117 tirages Q (jan–mai 2026) :
@@ -3202,21 +3246,24 @@
             if (Object.keys(maxDelays).length > 0) {
                 // Cas spécial max=16 : alerte "paire extrême" si 15 ET 16 absents simultanément
                 if (max === 16 && maxDelays[15] !== undefined && maxDelays[16] !== undefined) {
-                    const d15 = maxDelays[15], d16 = maxDelays[16];
+                    const d15 = maxDelays[15].delayTop3, d16 = maxDelays[16].delayTop3;
+                    const p15 = maxDelays[15].countP45,  p16 = maxDelays[16].countP45;
                     if (d15 >= alertSeuil || d16 >= alertSeuil) {
+                        const p15txt = p15 > 0 ? `, sorti ${p15}× en P4/P5` : '';
+                        const p16txt = p16 > 0 ? `, sorti ${p16}× en P4/P5` : '';
                         alerts.push({
                             type: 'warning',
-                            message: `⚠️ <strong>Paire extrême absente (max 16)</strong> : le 15 absent depuis ${d15} tirage${d15>1?'s':''} et le 16 absent depuis ${d16} tirage${d16>1?'s':''} — probabilité accrue des valeurs extrêmes`
+                            message: `⚠️ <strong>Paire extrême absente du top3 (max 16)</strong> : le 15 absent depuis ${d15} tirage${d15>1?'s':''}${p15txt} et le 16 absent depuis ${d16} tirage${d16>1?'s':''}${p16txt} — probabilité accrue des valeurs extrêmes`
                         });
                     }
                 } else {
                     for (const num in maxDelays) {
-                        const delay = maxDelays[num];
-                        if (delay >= alertSeuil) {
-                            // Message précis pour max=15
+                        const { delayTop3, countP45 } = maxDelays[num];
+                        if (delayTop3 >= alertSeuil) {
+                            const p45txt = countP45 > 0 ? `, sorti ${countP45}× en P4/P5` : '';
                             const precision = (max === 15 && parseInt(num) === 15)
-                                ? `⚠️ Le 15 (valeur max) n'est pas sorti depuis ${delay} tirage${delay>1?'s':''} à max 15 — probabilité accrue`
-                                : `⚠️ Le nombre ${num} n'est pas sorti depuis ${delay} tirage${delay>1?'s':''} à max ${max} (toutes modalités) — probabilité accrue`;
+                                ? `⚠️ Le 15 (valeur max) absent du top3 depuis ${delayTop3} tirage${delayTop3>1?'s':''}${p45txt} à max 15 — probabilité accrue`
+                                : `⚠️ Le ${num} absent du top3 depuis ${delayTop3} tirage${delayTop3>1?'s':''}${p45txt} à max ${max} — probabilité accrue`;
                             alerts.push({ type: 'warning', message: precision });
                         }
                     }
