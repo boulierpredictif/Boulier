@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Boulier Prédictif V5.12</title>
+    <title>Boulier Prédictif V5.13</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&family=Source+Sans+3:wght@300;400;600;700&display=swap');
 
@@ -524,7 +524,7 @@
     <div class="site-header">
         <div class="header-inner">
             <div class="header-tag">Outil prédictif · Boulier électrique</div>
-            <h1>🎲 Boulier Prédictif <span class="version">V5.12</span></h1>
+            <h1>🎲 Boulier Prédictif <span class="version">V5.13</span></h1>
         </div>
     </div>
 
@@ -615,6 +615,11 @@
                 <div class="stats-grid" id="home-stats"></div>
                 
                 <div class="alert alert-info">
+                    <div class="alert-title">🔧 V5.13 — Suppression V5.11 anti-gradient (régression identifiée)</div>
+                    <div>
+                    <strong>Constat</strong> : V5.11 (+3.5 flat sur tous n > max×0.70) combiné à V5.8 (bonusFort +5.0, seuil ≥3) et au <code>delayTop3</code> V5.12 produisait une sur-compensation systématique — hauts nombres à ~15.5 vs bas nombres à ~10, inversion totale du biais. Observé le 18/05/2026 : 10/12 prédictions max>10 avec 3–4 nombres >9 (moyenne 2.83 vs 0.63 historique).<br>
+                    <strong>Correction</strong> : suppression intégrale du bloc V5.11. V5.4 (×0.60) + V5.8 (retard ciblé) + <code>delayTop3</code> V5.12 forment un ensemble suffisant et calibré.
+                    </div>
                     <div class="alert-title">🔧 V5.12 — Alertes retard top3 + compteur P4/P5</div>
                     <div>
                     <strong>Constat</strong> : les alertes "absent depuis X tirages max Y" se réinitialisaient dès qu'un nombre sortait en P4 ou P5, masquant les vraies sécheresses positionnelles (ce qui compte c'est le top3).<br>
@@ -2781,26 +2786,12 @@
             }
             // === FIN V5.8 BONUS RETARD ===
 
-            // === V5.11 : CORRECTION ANTI-GRADIENT UNIVERSELLE ===
-            // Constat (analyse 5 006 tirages, mai 2026) : V5.4 (×0.60 sur n > max×0.70)
-            // produit un déficit structurel de −15 à −28 pts sur les hauts numéros pour
-            // tous les max de 11 à 16. Ex. max=14 : hauts [10–14] prédits à 6.8% vs réel 35.1%.
-            // Les règles empiriques amplifient le biais en boostant les bas numéros
-            // (dans methodScores.empirical ×0.15 → effet quasi nul sur scores finaux).
-            // Correction : bonus +3.5 direct sur scores[] pour tous les nombres > max×0.70,
-            // appliqué post-V5.4 et post-V5.8 (retard fort cumule : +5.0 + 3.5 = +8.5).
-            // Calibration : légèrement sous le bonusFort V5.8 (+5.0) pour ne pas écraser
-            // la hiérarchie des scores, mais suffisant pour rééquilibrer la sélection.
-            if (max >= 11) {
-                const seuilAntiGradient = max * 0.70;
-                for (const num in scores) {
-                    const n = parseInt(num);
-                    if (n > seuilAntiGradient) {
-                        scores[n] += 3.5;
-                    }
-                }
-            }
-            // === FIN V5.11 ANTI-GRADIENT ===
+            // === V5.11 SUPPRIMÉ EN V5.13 ===
+            // Le bonus +3.5 flat sur tous les nombres > max*0.70 sur-compensait V5.4 de manière
+            // inconditionnelle, empilé avec V5.8 (retard fort +5.0, seuil abaissé à 3 en V5.12).
+            // Résultat : hauts nombres à ~15.5 vs bas nombres à ~10 → inversion totale du biais.
+            // V5.4 + V5.8 + delayTop3 (V5.12) forment un ensemble suffisant et calibré.
+            // === FIN BLOC V5.11 SUPPRIMÉ ===
 
             // === V5.9 : CORRECTIONS SPÉCIFIQUES TIRAGES Q ===
             // Quatre corrections basées sur l'analyse de 117 tirages Q (jan–mai 2026) :
